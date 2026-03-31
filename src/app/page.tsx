@@ -840,12 +840,12 @@ export default function Home() {
   }
 
   if (isLoading) {
-    return <main className="min-h-screen p-6">Loading EMS app...</main>;
+    return <main className="min-h-screen p-4 sm:p-6">Loading EMS app...</main>;
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-100 via-zinc-50 to-zinc-100 p-6 text-zinc-900">
-      <div className="mx-auto mb-6 w-full max-w-[min(100%,110rem)] rounded-2xl bg-slate-900 p-5 text-white shadow-xl">
+    <main className="min-h-screen bg-gradient-to-b from-slate-100 via-zinc-50 to-zinc-100 p-4 sm:p-6 text-zinc-900">
+      <div className="mx-auto mb-4 sm:mb-6 w-full max-w-[min(100%,110rem)] rounded-2xl bg-slate-900 p-4 sm:p-5 text-white shadow-xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
             <div>
@@ -877,8 +877,8 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[min(100%,110rem)] gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-md lg:col-span-1">
+      <div className="mx-auto grid w-full max-w-[min(100%,110rem)] gap-4 sm:gap-6 lg:grid-cols-3">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-1">
           <h2 className="text-xl font-semibold">New EMS Run</h2>
           <p className="mt-1 text-sm text-zinc-600">
             Manual entry by station, run number, shift, outcome category, ROSC, and items used.
@@ -1363,7 +1363,7 @@ export default function Home() {
           </form>
         </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-md lg:col-span-2">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-2">
           <h2 className="text-xl font-semibold">Unit Dashboard</h2>
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
             <label className="text-sm text-zinc-700">
@@ -1431,7 +1431,7 @@ export default function Home() {
               />
             </label>
 
-            <div className="mt-6 flex flex-nowrap items-end gap-2 xl:col-span-2">
+            <div className="mt-4 flex flex-wrap items-end gap-2 xl:col-span-2 sm:flex-nowrap">
               <input
                 ref={importInputRef}
                 type="file"
@@ -1519,15 +1519,15 @@ export default function Home() {
               <thead>
                 <tr className="border-b border-zinc-200">
                   <th className="p-2">Date/Time</th>
-                  <th className="p-2">Primary Territory</th>
+                  <th className="hidden p-2 sm:table-cell">Primary Territory</th>
                   <th className="p-2">ImageTrend Incident #</th>
-                  <th className="p-2">Patient Age</th>
-                  <th className="p-2">Shift</th>
-                  <th className="p-2">Witness</th>
-                  <th className="p-2">Age Group</th>
-                  <th className="p-2">Category</th>
+                  <th className="hidden p-2 md:table-cell">Patient Age</th>
+                  <th className="hidden p-2 md:table-cell">Shift</th>
+                  <th className="hidden p-2 lg:table-cell">Witness</th>
+                  <th className="hidden p-2 lg:table-cell">Age Group</th>
+                  <th className="hidden p-2 sm:table-cell">Category</th>
                   <th className="p-2">ROSC</th>
-                  <th className="p-2">QI</th>
+                  <th className="hidden p-2 sm:table-cell">QI</th>
                   <th className="p-2 min-w-[9.5rem]">Actions</th>
                 </tr>
               </thead>
@@ -1539,7 +1539,7 @@ export default function Home() {
                     onClick={() => setNotesRun(run)}
                   >
                     <td className="p-2">{new Date(run.callDateTime).toLocaleString()}</td>
-                    <td className="p-2">{run.primaryResponseTerritoryName}</td>
+                    <td className="hidden p-2 sm:table-cell">{run.primaryResponseTerritoryName}</td>
                     <td className="p-2" onClick={(event) => event.stopPropagation()}>
                       {getImageTrendHref(run.runNumber, run.imageTrendIncidentLink) ? (
                         <a
@@ -1558,11 +1558,11 @@ export default function Home() {
                         </span>
                       )}
                     </td>
-                    <td className="p-2">{run.patientAge ?? "—"}</td>
-                    <td className="p-2">{run.shift}</td>
-                    <td className="p-2 text-zinc-700">{formatWitnessDisplay(run.arrestWitnessing)}</td>
-                    <td className="p-2 text-zinc-700">{formatAgeDisplay(run.patientAgeCategory)}</td>
-                    <td className="p-2">
+                    <td className="hidden p-2 md:table-cell">{run.patientAge ?? "—"}</td>
+                    <td className="hidden p-2 md:table-cell">{run.shift}</td>
+                    <td className="hidden p-2 text-zinc-700 lg:table-cell">{formatWitnessDisplay(run.arrestWitnessing)}</td>
+                    <td className="hidden p-2 text-zinc-700 lg:table-cell">{formatAgeDisplay(run.patientAgeCategory)}</td>
+                    <td className="hidden p-2 sm:table-cell">
                       <Badge tone={toBadgeToneFromRun(run)}>{toCategoryTextFromRun(run)}</Badge>
                     </td>
                     <td className="p-2">
@@ -1576,7 +1576,7 @@ export default function Home() {
                         {run.rosc ? "Yes" : "No"}
                       </span>
                     </td>
-                    <td className="p-2">
+                    <td className="hidden p-2 sm:table-cell">
                       <span
                         className={
                           run.qiIssuesIdentified
