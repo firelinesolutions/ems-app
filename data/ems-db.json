@@ -1,0 +1,147 @@
+{
+  "stations": [
+    {
+      "id": "st-1",
+      "name": "Station 1"
+    },
+    {
+      "id": "st-2",
+      "name": "Station 2"
+    },
+    {
+      "id": "st-3",
+      "name": "Station 3"
+    },
+    {
+      "id": "st-4",
+      "name": "Station 4"
+    },
+    {
+      "id": "st-5",
+      "name": "Station 5"
+    },
+    {
+      "id": "st-6",
+      "name": "Station 6"
+    },
+    {
+      "id": "st-7",
+      "name": "Station 7"
+    },
+    {
+      "id": "st-8",
+      "name": "Station 8"
+    },
+    {
+      "id": "st-9",
+      "name": "Station 9"
+    },
+    {
+      "id": "st-10",
+      "name": "Station 10"
+    },
+    {
+      "id": "st-11",
+      "name": "Station 11"
+    },
+    {
+      "id": "st-12",
+      "name": "Station 12"
+    },
+    {
+      "id": "st-13",
+      "name": "Station 13"
+    },
+    {
+      "id": "st-14",
+      "name": "Station 14"
+    },
+    {
+      "id": "st-15",
+      "name": "Station 15"
+    },
+    {
+      "id": "st-16",
+      "name": "Station 16"
+    },
+    {
+      "id": "st-17",
+      "name": "Station 17"
+    },
+    {
+      "id": "st-18",
+      "name": "Station 18"
+    },
+    {
+      "id": "st-19",
+      "name": "Station 19"
+    },
+    {
+      "id": "st-20",
+      "name": "Station 20"
+    },
+    {
+      "id": "st-21",
+      "name": "Station 21"
+    },
+    {
+      "id": "st-22",
+      "name": "Station 22"
+    },
+    {
+      "id": "st-23",
+      "name": "Station 23"
+    },
+    {
+      "id": "st-24",
+      "name": "Station 24"
+    },
+    {
+      "id": "st-25",
+      "name": "Station 25"
+    },
+    {
+      "id": "st-26",
+      "name": "Station 26"
+    },
+    {
+      "id": "st-27",
+      "name": "Station 27"
+    },
+    {
+      "id": "st-28",
+      "name": "Station 28"
+    },
+    {
+      "id": "st-30",
+      "name": "Station 30"
+    }
+  ],
+  "items": [
+    {
+      "id": "item-aed-pads",
+      "name": "AED pads"
+    },
+    {
+      "id": "item-req-pump",
+      "name": "RESQ Pump"
+    },
+    {
+      "id": "item-io",
+      "name": "IO"
+    },
+    {
+      "id": "item-intubation",
+      "name": "Intubation"
+    },
+    {
+      "id": "item-oxygen-mask",
+      "name": "Oxygen Mask"
+    },
+    {
+      "id": "item-iv-kit",
+      "name": "IV Kit"
+    }
+  ],
+  "runs": []
+}
