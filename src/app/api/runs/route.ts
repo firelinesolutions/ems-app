@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
+import { isDatabaseEnabled } from "@/lib/db";
+import { dbGetOptions, dbGetRuns, dbInsertRun } from "@/lib/db-store";
 import { readDb, writeDb } from "@/lib/store";
 import type {
   AirwayAdjunctRecord,
@@ -11,6 +13,7 @@ import type {
   OutcomeCategory,
   PatientAgeCategory,
   PatientDisposition,
+  RunRecord,
   Shift,
   UsedItemInput,
   UsedItemRecord,
@@ -56,7 +59,7 @@ const airwayAdjunctTypes: AirwayAdjunctType[] = ["bvm", "npa", "opa", "i-gel", "
 const vascularAccessTypes: VascularAccessType[] = ["iv", "io"];
 
 export async function GET() {
-  const db = await readDb();
+  const db = isDatabaseEnabled() ? await dbReadCompat() : await readDb();
   const sortedRuns = [...db.runs]
     .map((run) => ({
       ...run,
@@ -116,7 +119,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const payload = (await request.json()) as CreateRunPayload;
-  const db = await readDb();
+  const db = isDatabaseEnabled() ? await dbReadCompat() : await readDb();
 
   const effectiveStationId = payload.stationId || payload.primaryResponseTerritoryId;
   const station = db.stations.find((s) => s.id === effectiveStationId);
@@ -294,7 +297,18 @@ export async function POST(request: Request) {
   };
 
   db.runs.push(newRun);
-  await writeDb(db);
+  if (isDatabaseEnabled()) {
+    await dbInsertRun(newRun as unknown as RunRecord);
+  } else {
+    await writeDb(db);
+  }
 
   return NextResponse.json({ run: newRun }, { status: 201 });
+}
+
+async function dbReadCompat() {
+  // When database is enabled, stations/items are normalized; runs are stored as JSON.
+  const { stations, items } = await dbGetOptions();
+  const runs = await dbGetRuns();
+  return { stations, items, runs };
 }
