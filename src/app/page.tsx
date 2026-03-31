@@ -44,7 +44,7 @@ const battalionOptions: Array<{ value: Battalion; label: string }> = [
 const battalionStationIds: Record<Battalion, string[]> = {
   b1: ["st-1", "st-7", "st-9", "st-22", "st-27"],
   b2: ["st-2", "st-3", "st-4", "st-5", "st-19"],
-  b3: ["st-12", "st-14", "st-15", "st-16", "st-20", "st-21"],
+  b3: ["st-12", "st-14", "st-15", "st-16", "st-20", "st-21", "st-25"],
   b4: ["st-8", "st-18", "st-24", "st-26", "st-28"],
   b5: [],
 };
@@ -593,7 +593,9 @@ export default function Home() {
         ...battalionStationIds.b3,
         ...battalionStationIds.b4,
       ]);
-      return all.filter((s) => !b1to4.has(s.id));
+      return all
+        .filter((s) => !b1to4.has(s.id))
+        .sort((a, b) => stationNumberFromId(a.id) - stationNumberFromId(b.id));
     }
 
     // Keep explicit list order as provided (so station dropdown is in a predictable order).
@@ -612,7 +614,9 @@ export default function Home() {
         ...battalionStationIds.b3,
         ...battalionStationIds.b4,
       ]);
-      return stations.filter((s) => !b1to4.has(s.id));
+      return stations
+        .filter((s) => !b1to4.has(s.id))
+        .sort((a, b) => stationNumberFromId(a.id) - stationNumberFromId(b.id));
     }
     const ids = battalionStationIds[battalionFilter];
     return ids
