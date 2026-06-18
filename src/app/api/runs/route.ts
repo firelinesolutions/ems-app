@@ -14,6 +14,7 @@ import type {
   PatientAgeCategory,
   PatientDisposition,
   RunRecord,
+  RunType,
   Shift,
   UsedItemInput,
   UsedItemRecord,
@@ -23,6 +24,7 @@ import type {
 import { supplyItemRequiresSize } from "@/lib/types";
 
 type CreateRunPayload = {
+  runType?: RunType;
   primaryResponseTerritoryId: string;
   stationId?: string;
   patientAge: number | null;
@@ -63,6 +65,7 @@ export async function GET() {
   const sortedRuns = [...db.runs]
     .map((run) => ({
       ...run,
+      runType: run.runType === "trauma" ? "trauma" : "cardiac-arrest",
       primaryResponseTerritoryId: run.primaryResponseTerritoryId ?? run.stationId,
       primaryResponseTerritoryName: run.primaryResponseTerritoryName ?? run.stationName,
       patientAge: Number.isFinite(run.patientAge) ? run.patientAge : null,
@@ -158,6 +161,61 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  const parsedPatientAge =
+    payload.patientAge !== null && Number.isFinite(payload.patientAge)
+      ? Math.floor(payload.patientAge)
+      : null;
+
+  if (payload.runType === "trauma") {
+    const newRun: RunRecord = {
+      id: randomUUID(),
+      runType: "trauma",
+      primaryResponseTerritoryId: primaryResponseTerritory.id,
+      primaryResponseTerritoryName: primaryResponseTerritory.name,
+      stationId: station.id,
+      stationName: station.name,
+      patientAge: parsedPatientAge,
+      runNumber,
+      imageTrendIncidentLink: incidentLink,
+      shift: payload.shift || "A",
+      callDateTime: payload.callDateTime,
+      patientDisposition: null,
+      rosc: false,
+      defibrillationGiven: false,
+      defibrillationCount: null,
+      airwayAdjuncts: [],
+      vascularAccess: [],
+      resqPumpUsed: false,
+      resqPodUsed: false,
+      medicationsAdministered: [],
+      medicationOtherText: "",
+      incidentSummary: "",
+      qiIssuesIdentified: false,
+      qiIssueSummary: "",
+      defibPadsAppliedTime: "",
+      compressionsStartedTime: "",
+      defibrillationTime: "",
+      zollRecordLink: "",
+      rhythmStripImageDataUrl: "",
+      outcomeCategory: "needs-improvement",
+      arrestWitnessing: null,
+      patientAgeCategory: null,
+      notes: "",
+      itemsUsed: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    if (isDatabaseEnabled()) {
+      await dbInsertRun(newRun);
+    } else {
+      db.runs.push(newRun);
+      await writeDb(db);
+    }
+
+    return NextResponse.json({ run: newRun }, { status: 201 });
+  }
+
   if (
     payload.defibrillationGiven &&
     (!Number.isFinite(payload.defibrillationCount) || (payload.defibrillationCount as number) < 1)
@@ -206,10 +264,6 @@ export async function POST(request: Request) {
       return record;
     })
     .filter((item): item is UsedItemRecord => item !== null);
-  const parsedPatientAge =
-    payload.patientAge !== null && Number.isFinite(payload.patientAge)
-      ? Math.floor(payload.patientAge)
-      : null;
   const parsedDefibrillationCount =
     payload.defibrillationGiven && Number.isFinite(payload.defibrillationCount)
       ? Math.floor(payload.defibrillationCount as number)
@@ -248,6 +302,7 @@ export async function POST(request: Request) {
 
   const newRun = {
     id: randomUUID(),
+    runType: "cardiac-arrest" as const,
     primaryResponseTerritoryId: primaryResponseTerritory.id,
     primaryResponseTerritoryName: primaryResponseTerritory.name,
     stationId: station.id,

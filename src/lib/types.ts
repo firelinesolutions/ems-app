@@ -1,4 +1,5 @@
 export type Shift = "A" | "B" | "C";
+export type RunType = "cardiac-arrest" | "trauma";
 export type OutcomeCategory = "win" | "needs-improvement" | "negative";
 export type ArrestWitnessing = "witnessed" | "unwitnessed";
 export type PatientAgeCategory = "adult" | "pediatric";
@@ -75,6 +76,8 @@ export type VascularAccessRecord = {
 
 export type RunRecord = {
   id: string;
+  /** Defaults to cardiac-arrest for older records. */
+  runType?: RunType;
   primaryResponseTerritoryId: string;
   primaryResponseTerritoryName: string;
   stationId: string;

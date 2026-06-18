@@ -168,9 +168,18 @@ export default function Home() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  // -------- Trauma entry form state --------
+  const [traumaBattalion, setTraumaBattalion] = useState<Battalion>("b1");
+  const [traumaPrimaryResponseTerritoryId, setTraumaPrimaryResponseTerritoryId] = useState("");
+  const [traumaPatientAge, setTraumaPatientAge] = useState("");
+  const [traumaImageTrendIncidentLink, setTraumaImageTrendIncidentLink] = useState("");
+  const [traumaShift, setTraumaShift] = useState<Shift>("A");
+  const [traumaCallDateTime, setTraumaCallDateTime] = useState("");
+
   // -------- UI / request state --------
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingTrauma, setIsSavingTrauma] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -204,7 +213,11 @@ export default function Home() {
         const b1First = battalionStationIds.b1.find((id) => allStations.some((s) => s.id === id));
         setBattalion("b1");
         setPrimaryResponseTerritoryId(b1First ?? allStations[0]?.id ?? "");
-        setCallDateTime(toInputDateTime(new Date()));
+        setTraumaBattalion("b1");
+        setTraumaPrimaryResponseTerritoryId(b1First ?? allStations[0]?.id ?? "");
+        const now = toInputDateTime(new Date());
+        setCallDateTime(now);
+        setTraumaCallDateTime(now);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Failed to load data.");
       } finally {
@@ -244,9 +257,24 @@ export default function Home() {
     setAccessSizeInput("");
   }, [accessTypeInput]);
 
+  useEffect(() => {
+    setError("");
+    setSuccess("");
+  }, [activeModule]);
+
+  const cardiacRuns = useMemo(
+    () => runs.filter((run) => (run.runType ?? "cardiac-arrest") !== "trauma"),
+    [runs],
+  );
+
+  const traumaRuns = useMemo(
+    () => runs.filter((run) => run.runType === "trauma"),
+    [runs],
+  );
+
   const filteredRuns = useMemo(
     () =>
-      runs.filter((run) => {
+      cardiacRuns.filter((run) => {
         const matchesBattalion =
           battalionFilter === "all" ||
           getBattalionForStationId(run.primaryResponseTerritoryId) === battalionFilter;
@@ -260,8 +288,27 @@ export default function Home() {
         const matchesEnd = !endBoundary || runDate <= endBoundary;
         return matchesBattalion && matchesStation && matchesRosc && matchesStart && matchesEnd;
       }),
-    [runs, battalionFilter, stationFilter, roscFilter, startDate, endDate],
+    [cardiacRuns, battalionFilter, stationFilter, roscFilter, startDate, endDate],
   );
+
+  const sortedTraumaRuns = useMemo(() => {
+    const shiftOrder: Record<Shift, number> = { A: 0, B: 1, C: 2 };
+    return [...traumaRuns].sort((a, b) => {
+      const battalionA = battalionSortKey(getBattalionForStationId(a.primaryResponseTerritoryId));
+      const battalionB = battalionSortKey(getBattalionForStationId(b.primaryResponseTerritoryId));
+      if (battalionA !== battalionB) return battalionA - battalionB;
+
+      const stationA = stationNumberFromId(a.primaryResponseTerritoryId);
+      const stationB = stationNumberFromId(b.primaryResponseTerritoryId);
+      if (stationA !== stationB) return stationA - stationB;
+
+      const shiftA = shiftOrder[a.shift] ?? 99;
+      const shiftB = shiftOrder[b.shift] ?? 99;
+      if (shiftA !== shiftB) return shiftA - shiftB;
+
+      return b.callDateTime.localeCompare(a.callDateTime);
+    });
+  }, [traumaRuns]);
 
   const sortedRuns = useMemo(() => {
     const shiftOrder: Record<Shift, number> = { A: 0, B: 1, C: 2 };
@@ -323,6 +370,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          runType: "cardiac-arrest",
           primaryResponseTerritoryId,
           stationId: primaryResponseTerritoryId,
           patientAge: patientAge.trim() ? Number(patientAge) : null,
@@ -400,6 +448,51 @@ export default function Home() {
       setError(saveError instanceof Error ? saveError.message : "Failed to save run.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleTraumaSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setIsSavingTrauma(true);
+
+    try {
+      const incidentId = parseImageTrendIncidentId(traumaImageTrendIncidentLink);
+      if (!incidentId) {
+        throw new Error("Paste a valid ImageTrend Incident Link (it must contain Incident#######).");
+      }
+
+      const response = await fetch("/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          runType: "trauma",
+          primaryResponseTerritoryId: traumaPrimaryResponseTerritoryId,
+          stationId: traumaPrimaryResponseTerritoryId,
+          patientAge: traumaPatientAge.trim() ? Number(traumaPatientAge) : null,
+          runNumber: incidentId,
+          imageTrendIncidentLink: traumaImageTrendIncidentLink,
+          shift: traumaShift,
+          callDateTime: traumaCallDateTime,
+        }),
+      });
+
+      const json = (await response.json()) as { error?: string; run?: RunRecord };
+      if (!response.ok || !json.run) {
+        throw new Error(json.error || "Failed to save trauma run.");
+      }
+
+      setRuns((prev) => [json.run!, ...prev]);
+      setTraumaPatientAge("");
+      setTraumaImageTrendIncidentLink("");
+      setTraumaShift("A");
+      setTraumaCallDateTime(toInputDateTime(new Date()));
+      setSuccess("Trauma run saved successfully.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save trauma run.");
+    } finally {
+      setIsSavingTrauma(false);
     }
   }
 
@@ -611,6 +704,27 @@ export default function Home() {
       .filter((s): s is Station => Boolean(s))
       .concat(all.filter((s) => explicitSet.has(s.id) === false && false));
   }, [battalion, stations]);
+
+  const traumaStationsForSelectedBattalion = useMemo(() => {
+    const all = stations;
+    const explicitIds = battalionStationIds[traumaBattalion];
+
+    if (traumaBattalion === "b5") {
+      const b1to4 = new Set([
+        ...battalionStationIds.b1,
+        ...battalionStationIds.b2,
+        ...battalionStationIds.b3,
+        ...battalionStationIds.b4,
+      ]);
+      return all
+        .filter((s) => !b1to4.has(s.id))
+        .sort((a, b) => stationNumberFromId(a.id) - stationNumberFromId(b.id));
+    }
+
+    return explicitIds
+      .map((id) => all.find((s) => s.id === id))
+      .filter((s): s is Station => Boolean(s));
+  }, [traumaBattalion, stations]);
 
   const stationsForBattalionFilter = useMemo(() => {
     if (battalionFilter === "all") return stations;
@@ -1380,8 +1494,8 @@ export default function Home() {
               )}
             </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            {success && <p className="text-sm text-green-600">{success}</p>}
+            {error && activeModule === "cardiac-arrest" ? <p className="text-sm text-red-600">{error}</p> : null}
+            {success && activeModule === "cardiac-arrest" ? <p className="text-sm text-green-600">{success}</p> : null}
 
             <button
               className="w-full rounded-lg bg-red-700 p-2.5 font-medium text-white shadow disabled:opacity-60"
@@ -1655,26 +1769,27 @@ export default function Home() {
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-1">
           <h2 className="text-xl font-semibold">New Trauma Run</h2>
           <p className="mt-1 text-sm text-zinc-600">
-            Trauma reporting module. Field set and dashboard metrics will be added next.
+            Enter trauma run details. Additional trauma-specific fields will be added below Patient Age.
           </p>
 
-          <div className="mt-4 space-y-3">
+          <form className="mt-4 space-y-3" onSubmit={handleTraumaSubmit}>
             <label className="block text-sm">
               Battalion
               <select
                 className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
-                value={battalion}
+                value={traumaBattalion}
                 onChange={(e) => {
                   const next = e.target.value as Battalion;
-                  setBattalion(next);
+                  setTraumaBattalion(next);
                   const nextStations =
                     next === "b5"
-                      ? stationsForSelectedBattalion
+                      ? traumaStationsForSelectedBattalion
                       : battalionStationIds[next]
                           .map((id) => stations.find((s) => s.id === id))
                           .filter((s): s is Station => Boolean(s));
-                  setPrimaryResponseTerritoryId(nextStations[0]?.id ?? stations[0]?.id ?? "");
+                  setTraumaPrimaryResponseTerritoryId(nextStations[0]?.id ?? stations[0]?.id ?? "");
                 }}
+                required
               >
                 {battalionOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1688,10 +1803,11 @@ export default function Home() {
               Primary Response Territory
               <select
                 className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
-                value={primaryResponseTerritoryId}
-                onChange={(e) => setPrimaryResponseTerritoryId(e.target.value)}
+                value={traumaPrimaryResponseTerritoryId}
+                onChange={(e) => setTraumaPrimaryResponseTerritoryId(e.target.value)}
+                required
               >
-                {stationsForSelectedBattalion.map((station) => (
+                {traumaStationsForSelectedBattalion.map((station) => (
                   <option key={station.id} value={station.id}>
                     {station.name}
                   </option>
@@ -1703,8 +1819,8 @@ export default function Home() {
               Shift
               <select
                 className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
-                value={shift}
-                onChange={(e) => setShift(e.target.value as Shift)}
+                value={traumaShift}
+                onChange={(e) => setTraumaShift(e.target.value as Shift)}
               >
                 {shifts.map((shiftOption) => (
                   <option key={shiftOption} value={shiftOption}>
@@ -1718,8 +1834,10 @@ export default function Home() {
               ImageTrend Incident Link
               <input
                 className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                value={traumaImageTrendIncidentLink}
+                onChange={(e) => setTraumaImageTrendIncidentLink(e.target.value)}
                 placeholder="Paste full ImageTrend incident link"
-                disabled
+                required
               />
             </label>
 
@@ -1728,41 +1846,99 @@ export default function Home() {
               <input
                 className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
                 type="datetime-local"
-                disabled
+                value={traumaCallDateTime}
+                onChange={(e) => setTraumaCallDateTime(e.target.value)}
+                required
               />
             </label>
 
             <label className="block text-sm">
-              Trauma incident summary
-              <textarea
+              Patient Age
+              <input
                 className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
-                rows={4}
-                placeholder="Trauma-specific fields coming soon"
-                disabled
+                type="number"
+                min={0}
+                value={traumaPatientAge}
+                onChange={(e) => setTraumaPatientAge(e.target.value)}
+                placeholder="Example: 67"
               />
             </label>
 
+            {error && activeModule === "trauma" ? <p className="text-sm text-red-600">{error}</p> : null}
+            {success && activeModule === "trauma" ? <p className="text-sm text-green-600">{success}</p> : null}
+
             <button
-              type="button"
-              className="w-full cursor-not-allowed rounded-lg bg-zinc-400 p-2.5 font-medium text-white"
-              disabled
+              className="w-full rounded-lg bg-red-700 p-2.5 font-medium text-white shadow disabled:opacity-60"
+              type="submit"
+              disabled={isSavingTrauma}
             >
-              Save Trauma Run (coming soon)
+              {isSavingTrauma ? "Saving..." : "Save Trauma Run"}
             </button>
-          </div>
+          </form>
         </section>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-2">
           <h2 className="text-xl font-semibold">Trauma Dashboard</h2>
           <p className="mt-1 text-sm text-zinc-600">
-            Trauma metrics, filters, and export will mirror the cardiac arrest workflow once fields are defined.
+            {sortedTraumaRuns.length} trauma run{sortedTraumaRuns.length === 1 ? "" : "s"} recorded.
           </p>
 
-          <div className="mt-6 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center">
-            <p className="text-sm font-medium text-zinc-700">No trauma records yet</p>
-            <p className="mt-2 text-sm text-zinc-500">
-              Switch back to Cardiac Arrest to view existing QA data, or share the trauma field list to enable this module.
-            </p>
+          <div className="mt-4 w-full overflow-x-auto">
+            <table className="min-w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200">
+                  <th className="p-2">Date/Time</th>
+                  <th className="hidden p-2 sm:table-cell">Primary Territory</th>
+                  <th className="p-2">ImageTrend Incident #</th>
+                  <th className="hidden p-2 md:table-cell">Patient Age</th>
+                  <th className="hidden p-2 md:table-cell">Shift</th>
+                  <th className="p-2 min-w-[9.5rem]">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedTraumaRuns.map((run) => (
+                  <tr key={run.id} className="border-b border-zinc-100 hover:bg-zinc-50/90">
+                    <td className="p-2">{new Date(run.callDateTime).toLocaleString()}</td>
+                    <td className="hidden p-2 sm:table-cell">{run.primaryResponseTerritoryName}</td>
+                    <td className="p-2">
+                      {getImageTrendHref(run.runNumber, run.imageTrendIncidentLink) ? (
+                        <a
+                          href={getImageTrendHref(run.runNumber, run.imageTrendIncidentLink)!}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                        >
+                          {getIncidentDisplayNumber(run.runNumber, run.imageTrendIncidentLink)}
+                        </a>
+                      ) : (
+                        <span className="font-medium text-zinc-900">
+                          {getIncidentDisplayNumber(run.runNumber, run.imageTrendIncidentLink)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="hidden p-2 md:table-cell">{run.patientAge ?? "—"}</td>
+                    <td className="hidden p-2 md:table-cell">{run.shift}</td>
+                    <td className="p-2">
+                      <button
+                        type="button"
+                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+                        disabled={deletingId === run.id}
+                        onClick={() => void handleDeleteRun(run)}
+                      >
+                        {deletingId === run.id ? "Deleting…" : "Delete"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {sortedTraumaRuns.length === 0 && (
+                  <tr>
+                    <td className="p-4 text-center text-zinc-500" colSpan={6}>
+                      No trauma runs recorded yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
       </div>
