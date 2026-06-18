@@ -27,6 +27,12 @@ type RunsResponse = {
 
 type RoscFilter = "all" | "yes" | "no";
 type Battalion = "b1" | "b2" | "b3" | "b4" | "b5";
+type QAModule = "cardiac-arrest" | "trauma";
+
+const moduleOptions: Array<{ value: QAModule; label: string }> = [
+  { value: "cardiac-arrest", label: "Cardiac Arrest" },
+  { value: "trauma", label: "Trauma" },
+];
 
 /**
  * Extension points:
@@ -105,6 +111,7 @@ const IMAGETREND_INCIDENT_LIST_URL_TEMPLATE =
 
 export default function Home() {
   // -------- App data --------
+  const [activeModule, setActiveModule] = useState<QAModule>("cardiac-arrest");
   const [stations, setStations] = useState<Station[]>([]);
   const [runs, setRuns] = useState<RunRecord[]>([]);
 
@@ -850,37 +857,56 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-zinc-50 to-zinc-100 p-4 sm:p-6 text-zinc-900">
       <div className="mx-auto mb-4 sm:mb-6 w-full max-w-[min(100%,110rem)] rounded-2xl bg-slate-900 p-4 sm:p-5 text-white shadow-xl">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex flex-col gap-3">
             <div>
               <p className="text-xs uppercase tracking-widest text-slate-200">Operations Dashboard</p>
-              <h1 className="text-xl font-semibold md:text-2xl">EMS Cardiac Arrest QA</h1>
+              <h1 className="text-xl font-semibold md:text-2xl">
+                {activeModule === "cardiac-arrest" ? "EMS Cardiac Arrest QA" : "EMS Trauma QA"}
+              </h1>
             </div>
+            <label className="block w-full max-w-xs text-sm">
+              <span className="text-xs uppercase tracking-wide text-slate-300">Module</span>
+              <select
+                className="mt-1 w-full rounded-lg border border-white/20 bg-white/10 p-2 text-sm text-white"
+                value={activeModule}
+                onChange={(e) => setActiveModule(e.target.value as QAModule)}
+              >
+                {moduleOptions.map((option) => (
+                  <option key={option.value} value={option.value} className="text-zinc-900">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <div className="w-full md:w-auto">
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-3">
-              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-6 md:text-sm">
-                <div className="col-span-1 sm:col-span-2">
-                  <StatChip label="Total Arrests" value={String(filteredRuns.length)} />
-                </div>
-                <div className="col-span-1 sm:col-span-2">
-                  <StatChip label="ROSC %" value={roscPercentageText} />
-                </div>
-                <div className="col-span-1 sm:col-span-2">
-                  <StatChip label="ROSC" value={String(roscCount)} />
-                </div>
-                <div className="col-span-1 sm:col-span-3">
-                  <StatChip label="Pt's Defibrillated" value={String(defibCount)} />
-                </div>
-                <div className="col-span-1 sm:col-span-3">
-                  <StatChip label="QI Cases" value={String(qiCount)} />
+          {activeModule === "cardiac-arrest" ? (
+            <div className="w-full md:w-auto">
+              <div className="rounded-2xl border border-white/15 bg-white/10 p-3">
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-6 md:text-sm">
+                  <div className="col-span-1 sm:col-span-2">
+                    <StatChip label="Total Arrests" value={String(filteredRuns.length)} />
+                  </div>
+                  <div className="col-span-1 sm:col-span-2">
+                    <StatChip label="ROSC %" value={roscPercentageText} />
+                  </div>
+                  <div className="col-span-1 sm:col-span-2">
+                    <StatChip label="ROSC" value={String(roscCount)} />
+                  </div>
+                  <div className="col-span-1 sm:col-span-3">
+                    <StatChip label="Pt's Defibrillated" value={String(defibCount)} />
+                  </div>
+                  <div className="col-span-1 sm:col-span-3">
+                    <StatChip label="QI Cases" value={String(qiCount)} />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
 
+      {activeModule === "cardiac-arrest" ? (
       <div className="mx-auto grid w-full max-w-[min(100%,110rem)] gap-4 sm:gap-6 lg:grid-cols-3">
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-1">
           <h2 className="text-xl font-semibold">New EMS Run</h2>
@@ -1624,8 +1650,125 @@ export default function Home() {
           </div>
         </section>
       </div>
+      ) : (
+      <div className="mx-auto grid w-full max-w-[min(100%,110rem)] gap-4 sm:gap-6 lg:grid-cols-3">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-1">
+          <h2 className="text-xl font-semibold">New Trauma Run</h2>
+          <p className="mt-1 text-sm text-zinc-600">
+            Trauma reporting module. Field set and dashboard metrics will be added next.
+          </p>
 
-      {notesRun && (
+          <div className="mt-4 space-y-3">
+            <label className="block text-sm">
+              Battalion
+              <select
+                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                value={battalion}
+                onChange={(e) => {
+                  const next = e.target.value as Battalion;
+                  setBattalion(next);
+                  const nextStations =
+                    next === "b5"
+                      ? stationsForSelectedBattalion
+                      : battalionStationIds[next]
+                          .map((id) => stations.find((s) => s.id === id))
+                          .filter((s): s is Station => Boolean(s));
+                  setPrimaryResponseTerritoryId(nextStations[0]?.id ?? stations[0]?.id ?? "");
+                }}
+              >
+                {battalionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm">
+              Primary Response Territory
+              <select
+                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                value={primaryResponseTerritoryId}
+                onChange={(e) => setPrimaryResponseTerritoryId(e.target.value)}
+              >
+                {stationsForSelectedBattalion.map((station) => (
+                  <option key={station.id} value={station.id}>
+                    {station.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm">
+              Shift
+              <select
+                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                value={shift}
+                onChange={(e) => setShift(e.target.value as Shift)}
+              >
+                {shifts.map((shiftOption) => (
+                  <option key={shiftOption} value={shiftOption}>
+                    {shiftOption}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm">
+              ImageTrend Incident Link
+              <input
+                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                placeholder="Paste full ImageTrend incident link"
+                disabled
+              />
+            </label>
+
+            <label className="block text-sm">
+              Call Date/Time
+              <input
+                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                type="datetime-local"
+                disabled
+              />
+            </label>
+
+            <label className="block text-sm">
+              Trauma incident summary
+              <textarea
+                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                rows={4}
+                placeholder="Trauma-specific fields coming soon"
+                disabled
+              />
+            </label>
+
+            <button
+              type="button"
+              className="w-full cursor-not-allowed rounded-lg bg-zinc-400 p-2.5 font-medium text-white"
+              disabled
+            >
+              Save Trauma Run (coming soon)
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-2">
+          <h2 className="text-xl font-semibold">Trauma Dashboard</h2>
+          <p className="mt-1 text-sm text-zinc-600">
+            Trauma metrics, filters, and export will mirror the cardiac arrest workflow once fields are defined.
+          </p>
+
+          <div className="mt-6 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center">
+            <p className="text-sm font-medium text-zinc-700">No trauma records yet</p>
+            <p className="mt-2 text-sm text-zinc-500">
+              Switch back to Cardiac Arrest to view existing QA data, or share the trauma field list to enable this module.
+            </p>
+          </div>
+        </section>
+      </div>
+      )}
+
+      {notesRun && activeModule === "cardiac-arrest" && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
           role="presentation"
