@@ -11,11 +11,15 @@ import type {
   OutcomeCategory,
   PatientAgeCategory,
   PatientDisposition,
+  ProcedureRecord,
   RunRecord,
   Shift,
   Station,
   VascularAccessRecord,
 } from "@/lib/types";
+import { AppHeader } from "@/components/app-header";
+import { LoadingScreen } from "@/components/loading-screen";
+import { StatusBanner } from "@/components/status-banner";
 
 type OptionsResponse = {
   stations: Station[];
@@ -85,6 +89,40 @@ const medicationOptions: Array<{ id: string; name: string }> = [
   { id: "med-magnesium", name: "Magnesium" },
   { id: "med-calcium", name: "Calcium" },
   { id: "med-sodium-bicarbonate", name: "Sodium Bicarbonate" },
+];
+const traumaMedicationOptions: Array<{ id: string; name: string }> = [
+  { id: "med-txa", name: "TXA" },
+  { id: "med-rocephin", name: "Rocephin" },
+  { id: "med-prbcs", name: "PRBCs" },
+  { id: "med-plasma", name: "Plasma" },
+  { id: "med-oxygen", name: "Oxygen" },
+  { id: "med-calcium", name: "Calcium" },
+  { id: "med-saline", name: "Saline" },
+  { id: "med-ketamine", name: "Ketamine" },
+  { id: "med-fentanyl", name: "Fentanyl" },
+  { id: "med-toradol", name: "Toradol" },
+  { id: "med-versed", name: "Versed" },
+  { id: "med-albuterol", name: "Albuterol" },
+  { id: "med-sodium-bicarbonate", name: "Sodium Bicarbonate" },
+];
+const traumaProcedureOptions: Array<{ id: string; name: string }> = [
+  { id: "proc-c-collar", name: "C Collar" },
+  { id: "proc-c-spine-restriction", name: "C Spine Restriction" },
+  { id: "proc-blood-product-admin", name: "Blood Product Administration" },
+  { id: "proc-tourniquet", name: "Tourniquet" },
+  { id: "proc-lsb-applied", name: "LSB Applied" },
+  { id: "proc-hemostatic-spray", name: "Hemostatic Spray" },
+  { id: "proc-trauma-gel", name: "Trauma Gel" },
+  { id: "proc-occlusive-dressing", name: "Occlusive Dressing" },
+  { id: "proc-needle-decompression", name: "Needle Decompression" },
+  { id: "proc-needle-cricothyrotomy", name: "Needle Cricothyrotomy" },
+  { id: "proc-packing-hemorrhage", name: "Packing for Hemorrhage" },
+  { id: "proc-blood-transfusion", name: "Transfusion of Blood Products" },
+  { id: "proc-etco2", name: "ETCO2" },
+  { id: "proc-pressure-dressing", name: "Pressure Dressing" },
+  { id: "proc-pelvic-binder", name: "Pelvic Binder" },
+  { id: "proc-traction-splint", name: "Traction Splint" },
+  { id: "proc-direct-pressure", name: "Direct Pressure" },
 ];
 // Branding: keep this app deployable for any agency.
 
@@ -167,6 +205,12 @@ export default function Home() {
   const [roscFilter, setRoscFilter] = useState<RoscFilter>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [traumaStationFilter, setTraumaStationFilter] = useState("all");
+  const [traumaBattalionFilter, setTraumaBattalionFilter] = useState<"all" | Battalion>("all");
+  const [traumaCenterFilter, setTraumaCenterFilter] = useState<RoscFilter>("all");
+  const [traumaTriageFilter, setTraumaTriageFilter] = useState<RoscFilter>("all");
+  const [traumaStartDate, setTraumaStartDate] = useState("");
+  const [traumaEndDate, setTraumaEndDate] = useState("");
 
   // -------- Trauma entry form state --------
   const [traumaBattalion, setTraumaBattalion] = useState<Battalion>("b1");
@@ -175,6 +219,24 @@ export default function Home() {
   const [traumaImageTrendIncidentLink, setTraumaImageTrendIncidentLink] = useState("");
   const [traumaShift, setTraumaShift] = useState<Shift>("A");
   const [traumaCallDateTime, setTraumaCallDateTime] = useState("");
+  const [traumaCenterCriteria, setTraumaCenterCriteria] = useState<"" | "yes" | "no">("");
+  const [traumaTriageCriteria, setTraumaTriageCriteria] = useState<"" | "yes" | "no">("");
+  const [traumaMedicationsAdministered, setTraumaMedicationsAdministered] = useState<MedicationRecord[]>([]);
+  const [traumaSelectedMedicationId, setTraumaSelectedMedicationId] = useState(
+    traumaMedicationOptions[0]?.id ?? "",
+  );
+  const [traumaSelectedMedicationDosage, setTraumaSelectedMedicationDosage] = useState("");
+  const [traumaMedicationOtherText, setTraumaMedicationOtherText] = useState("");
+  const [traumaProceduresPerformed, setTraumaProceduresPerformed] = useState<ProcedureRecord[]>([]);
+  const [traumaSelectedProcedureId, setTraumaSelectedProcedureId] = useState(
+    traumaProcedureOptions[0]?.id ?? "",
+  );
+  const [traumaProcedureOtherText, setTraumaProcedureOtherText] = useState("");
+  const [traumaVascularAccess, setTraumaVascularAccess] = useState<VascularAccessRecord[]>([]);
+  const [traumaAccessTypeInput, setTraumaAccessTypeInput] = useState<"iv" | "io">("iv");
+  const [traumaAccessLocationInput, setTraumaAccessLocationInput] = useState("");
+  const [traumaAccessLocationOtherInput, setTraumaAccessLocationOtherInput] = useState("");
+  const [traumaAccessSizeInput, setTraumaAccessSizeInput] = useState("");
 
   // -------- UI / request state --------
   const [isLoading, setIsLoading] = useState(true);
@@ -183,9 +245,11 @@ export default function Home() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isTraumaExportMenuOpen, setIsTraumaExportMenuOpen] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [importProgressText, setImportProgressText] = useState("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const traumaImportInputRef = useRef<HTMLInputElement | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [notesRun, setNotesRun] = useState<RunRecord | null>(null);
   const [error, setError] = useState("");
@@ -240,15 +304,16 @@ export default function Home() {
   }, [notesRun]);
 
   useEffect(() => {
-    if (!isExportMenuOpen) return;
+    if (!isExportMenuOpen && !isTraumaExportMenuOpen) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsExportMenuOpen(false);
+        setIsTraumaExportMenuOpen(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isExportMenuOpen]);
+  }, [isExportMenuOpen, isTraumaExportMenuOpen]);
 
   useEffect(() => {
     // Reset dependent access fields when switching between IV and IO.
@@ -256,6 +321,12 @@ export default function Home() {
     setAccessLocationOtherInput("");
     setAccessSizeInput("");
   }, [accessTypeInput]);
+
+  useEffect(() => {
+    setTraumaAccessLocationInput("");
+    setTraumaAccessLocationOtherInput("");
+    setTraumaAccessSizeInput("");
+  }, [traumaAccessTypeInput]);
 
   useEffect(() => {
     setError("");
@@ -291,9 +362,52 @@ export default function Home() {
     [cardiacRuns, battalionFilter, stationFilter, roscFilter, startDate, endDate],
   );
 
+  const filteredTraumaRuns = useMemo(
+    () =>
+      traumaRuns.filter((run) => {
+        const matchesBattalion =
+          traumaBattalionFilter === "all" ||
+          getBattalionForStationId(run.primaryResponseTerritoryId) === traumaBattalionFilter;
+        const matchesStation =
+          traumaStationFilter === "all" || run.stationId === traumaStationFilter;
+        const matchesTraumaCenter =
+          traumaCenterFilter === "all" ||
+          (traumaCenterFilter === "yes"
+            ? run.traumaCenterCriteriaSelected === true
+            : run.traumaCenterCriteriaSelected !== true);
+        const matchesTraumaTriage =
+          traumaTriageFilter === "all" ||
+          (traumaTriageFilter === "yes"
+            ? run.traumaTriageCriteriaSelected === true
+            : run.traumaTriageCriteriaSelected !== true);
+        const runDate = new Date(run.callDateTime);
+        const startBoundary = traumaStartDate ? new Date(`${traumaStartDate}T00:00:00`) : null;
+        const endBoundary = traumaEndDate ? new Date(`${traumaEndDate}T23:59:59`) : null;
+        const matchesStart = !startBoundary || runDate >= startBoundary;
+        const matchesEnd = !endBoundary || runDate <= endBoundary;
+        return (
+          matchesBattalion &&
+          matchesStation &&
+          matchesTraumaCenter &&
+          matchesTraumaTriage &&
+          matchesStart &&
+          matchesEnd
+        );
+      }),
+    [
+      traumaRuns,
+      traumaBattalionFilter,
+      traumaStationFilter,
+      traumaCenterFilter,
+      traumaTriageFilter,
+      traumaStartDate,
+      traumaEndDate,
+    ],
+  );
+
   const sortedTraumaRuns = useMemo(() => {
     const shiftOrder: Record<Shift, number> = { A: 0, B: 1, C: 2 };
-    return [...traumaRuns].sort((a, b) => {
+    return [...filteredTraumaRuns].sort((a, b) => {
       const battalionA = battalionSortKey(getBattalionForStationId(a.primaryResponseTerritoryId));
       const battalionB = battalionSortKey(getBattalionForStationId(b.primaryResponseTerritoryId));
       if (battalionA !== battalionB) return battalionA - battalionB;
@@ -308,7 +422,7 @@ export default function Home() {
 
       return b.callDateTime.localeCompare(a.callDateTime);
     });
-  }, [traumaRuns]);
+  }, [filteredTraumaRuns]);
 
   const sortedRuns = useMemo(() => {
     const shiftOrder: Record<Shift, number> = { A: 0, B: 1, C: 2 };
@@ -330,6 +444,15 @@ export default function Home() {
     });
   }, [filteredRuns]);
 
+  const traumaTriageCount = useMemo(
+    () => filteredTraumaRuns.filter((run) => run.traumaTriageCriteriaSelected).length,
+    [filteredTraumaRuns],
+  );
+  const traumaCenterCount = useMemo(
+    () => filteredTraumaRuns.filter((run) => run.traumaCenterCriteriaSelected).length,
+    [filteredTraumaRuns],
+  );
+
   const roscCount = useMemo(
     () => filteredRuns.filter((run) => run.rosc).length,
     [filteredRuns],
@@ -348,6 +471,54 @@ export default function Home() {
     const rounded = Math.round(pct * 10) / 10;
     return `${rounded}%`;
   }, [filteredRuns.length, roscCount]);
+  const traumaCenterPercentageText = useMemo(() => {
+    if (!filteredTraumaRuns.length) return "—";
+    const pct = (traumaCenterCount / filteredTraumaRuns.length) * 100;
+    const rounded = Math.round(pct * 10) / 10;
+    return `${rounded}%`;
+  }, [filteredTraumaRuns.length, traumaCenterCount]);
+  const traumaTriagePercentageText = useMemo(() => {
+    if (!filteredTraumaRuns.length) return "—";
+    const pct = (traumaTriageCount / filteredTraumaRuns.length) * 100;
+    const rounded = Math.round(pct * 10) / 10;
+    return `${rounded}%`;
+  }, [filteredTraumaRuns.length, traumaTriageCount]);
+
+  const headerStats = useMemo(() => {
+    if (activeModule === "cardiac-arrest") {
+      return [
+        { label: "Total Arrests", value: String(filteredRuns.length) },
+        { label: "ROSC %", value: roscPercentageText },
+        { label: "ROSC", value: String(roscCount) },
+        { label: "Defibrillated", value: String(defibCount) },
+        { label: "QI Cases", value: String(qiCount) },
+      ];
+    }
+    return [
+      { label: "Total Cases", value: String(filteredTraumaRuns.length) },
+      { label: "Center %", value: traumaCenterPercentageText },
+      { label: "Trauma Center", value: String(traumaCenterCount) },
+      { label: "Triage %", value: traumaTriagePercentageText },
+      { label: "Trauma Triage", value: String(traumaTriageCount) },
+    ];
+  }, [
+    activeModule,
+    defibCount,
+    filteredRuns.length,
+    filteredTraumaRuns.length,
+    qiCount,
+    roscCount,
+    roscPercentageText,
+    traumaCenterCount,
+    traumaCenterPercentageText,
+    traumaTriageCount,
+    traumaTriagePercentageText,
+  ]);
+
+  async function handleSignOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -462,6 +633,9 @@ export default function Home() {
       if (!incidentId) {
         throw new Error("Paste a valid ImageTrend Incident Link (it must contain Incident#######).");
       }
+      if (!traumaCenterCriteria || !traumaTriageCriteria) {
+        throw new Error("Select Yes or No for Trauma Center and Trauma Triage criteria.");
+      }
 
       const response = await fetch("/api/runs", {
         method: "POST",
@@ -475,6 +649,13 @@ export default function Home() {
           imageTrendIncidentLink: traumaImageTrendIncidentLink,
           shift: traumaShift,
           callDateTime: traumaCallDateTime,
+          traumaCenterCriteriaSelected: traumaCenterCriteria === "yes",
+          traumaTriageCriteriaSelected: traumaTriageCriteria === "yes",
+          traumaProcedures: traumaProceduresPerformed,
+          traumaProcedureOtherText: traumaProcedureOtherText,
+          medicationsAdministered: traumaMedicationsAdministered,
+          medicationOtherText: traumaMedicationOtherText,
+          vascularAccess: traumaVascularAccess,
         }),
       });
 
@@ -488,6 +669,18 @@ export default function Home() {
       setTraumaImageTrendIncidentLink("");
       setTraumaShift("A");
       setTraumaCallDateTime(toInputDateTime(new Date()));
+      setTraumaCenterCriteria("");
+      setTraumaTriageCriteria("");
+      setTraumaMedicationsAdministered([]);
+      setTraumaSelectedMedicationDosage("");
+      setTraumaMedicationOtherText("");
+      setTraumaProceduresPerformed([]);
+      setTraumaProcedureOtherText("");
+      setTraumaVascularAccess([]);
+      setTraumaAccessTypeInput("iv");
+      setTraumaAccessLocationInput("");
+      setTraumaAccessLocationOtherInput("");
+      setTraumaAccessSizeInput("");
       setSuccess("Trauma run saved successfully.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save trauma run.");
@@ -524,6 +717,30 @@ export default function Home() {
     setVascularAccess((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function addTraumaVascularAccess() {
+    const location =
+      traumaAccessTypeInput === "iv" && traumaAccessLocationInput === "other"
+        ? traumaAccessLocationOtherInput.trim()
+        : traumaAccessLocationInput.trim();
+    const size = traumaAccessSizeInput.trim();
+    if (!location || !size) {
+      setError("Enter both vascular access location and size.");
+      return;
+    }
+    setTraumaVascularAccess((prev) => [
+      ...prev,
+      { type: traumaAccessTypeInput, location, size },
+    ]);
+    setError("");
+    setTraumaAccessLocationInput("");
+    setTraumaAccessLocationOtherInput("");
+    setTraumaAccessSizeInput("");
+  }
+
+  function removeTraumaVascularAccessAt(index: number) {
+    setTraumaVascularAccess((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function addMedication() {
     const medication = medicationOptions.find((m) => m.id === selectedMedicationId);
     if (!medication || selectedMedicationAdministrations < 1 || !selectedMedicationAmount.trim()) return;
@@ -544,7 +761,49 @@ export default function Home() {
     setMedicationsAdministered((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function handleImportCsvFile(file: File) {
+  function addTraumaMedication() {
+    const medication = traumaMedicationOptions.find((m) => m.id === traumaSelectedMedicationId);
+    if (!medication || !traumaSelectedMedicationDosage.trim()) {
+      setError("Select a medication and enter a dosage.");
+      return;
+    }
+    setError("");
+    setTraumaMedicationsAdministered((prev) => [
+      ...prev,
+      {
+        medicationId: medication.id,
+        medicationName: medication.name,
+        amount: traumaSelectedMedicationDosage.trim(),
+        administrations: 1,
+      },
+    ]);
+    setTraumaSelectedMedicationDosage("");
+  }
+
+  function removeTraumaMedicationAt(index: number) {
+    setTraumaMedicationsAdministered((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addTraumaProcedure() {
+    const procedure = traumaProcedureOptions.find((p) => p.id === traumaSelectedProcedureId);
+    if (!procedure) return;
+    if (traumaProceduresPerformed.some((entry) => entry.procedureId === procedure.id)) {
+      setError("That procedure is already added.");
+      return;
+    }
+    setError("");
+    setTraumaProceduresPerformed((prev) => [
+      ...prev,
+      { procedureId: procedure.id, procedureName: procedure.name },
+    ]);
+  }
+
+  function removeTraumaProcedureAt(index: number) {
+    setTraumaProceduresPerformed((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleImportCsvFile(file: File, forModule: QAModule = activeModule) {
+    const isTrauma = forModule === "trauma";
     setError("");
     setSuccess("");
     setImportProgressText("");
@@ -607,7 +866,44 @@ export default function Home() {
         const defibGivenValue = getCsvCell(row, colIndex, ["defibrillation given", "defib given", "defib"]).trim();
         const defibCountValue = getCsvCell(row, colIndex, ["defibrillation count", "defib count", "shocks"]).trim();
 
-        const body = {
+        const traumaCenterValue = getCsvCell(row, colIndex, [
+          "trauma center",
+          "trauma center criteria",
+          "trauma center criteria selected",
+        ]).trim();
+        const traumaTriageValue = getCsvCell(row, colIndex, [
+          "trauma triage",
+          "trauma triage criteria",
+          "trauma triage criteria selected",
+        ]).trim();
+        const traumaMedicationsValue = getCsvCell(row, colIndex, [
+          "medications administered",
+          "medications",
+          "trauma medications",
+        ]).trim();
+        const traumaProceduresValue = getCsvCell(row, colIndex, [
+          "procedures",
+          "trauma procedures",
+        ]).trim();
+
+        const body = isTrauma
+          ? {
+              runType: "trauma" as const,
+              primaryResponseTerritoryId: stationId,
+              stationId,
+              patientAge: patientAgeParsed,
+              runNumber: incidentId,
+              imageTrendIncidentLink: incidentLink,
+              shift: shiftParsed,
+              callDateTime: callIso,
+              traumaCenterCriteriaSelected: parseCsvBoolean(traumaCenterValue),
+              traumaTriageCriteriaSelected: parseCsvBoolean(traumaTriageValue),
+              traumaMedicationsText: traumaMedicationsValue,
+              traumaProceduresText: traumaProceduresValue,
+              vascularAccess: [],
+            }
+          : {
+          runType: "cardiac-arrest" as const,
           primaryResponseTerritoryId: stationId,
           stationId,
           patientAge: patientAgeParsed,
@@ -663,6 +959,9 @@ export default function Home() {
       if (importInputRef.current) {
         importInputRef.current.value = "";
       }
+      if (traumaImportInputRef.current) {
+        traumaImportInputRef.current.value = "";
+      }
     }
   }
 
@@ -678,6 +977,15 @@ export default function Home() {
     setRoscFilter("all");
     setStartDate("");
     setEndDate("");
+  }
+
+  function clearTraumaDashboardFilters() {
+    setTraumaStationFilter("all");
+    setTraumaBattalionFilter("all");
+    setTraumaCenterFilter("all");
+    setTraumaTriageFilter("all");
+    setTraumaStartDate("");
+    setTraumaEndDate("");
   }
 
   const stationsForSelectedBattalion = useMemo(() => {
@@ -744,6 +1052,34 @@ export default function Home() {
       .map((id) => stations.find((s) => s.id === id))
       .filter((s): s is Station => Boolean(s));
   }, [battalionFilter, stations]);
+
+  const traumaStationsForBattalionFilter = useMemo(() => {
+    if (traumaBattalionFilter === "all") return stations;
+    if (traumaBattalionFilter === "b5") {
+      const b1to4 = new Set([
+        ...battalionStationIds.b1,
+        ...battalionStationIds.b2,
+        ...battalionStationIds.b3,
+        ...battalionStationIds.b4,
+      ]);
+      return stations
+        .filter((s) => !b1to4.has(s.id))
+        .sort((a, b) => stationNumberFromId(a.id) - stationNumberFromId(b.id));
+    }
+    const ids = battalionStationIds[traumaBattalionFilter];
+    return ids
+      .map((id) => stations.find((s) => s.id === id))
+      .filter((s): s is Station => Boolean(s));
+  }, [traumaBattalionFilter, stations]);
+
+  useEffect(() => {
+    if (traumaBattalionFilter === "all") return;
+    if (traumaStationFilter === "all") return;
+    const stillValid = traumaStationsForBattalionFilter.some((s) => s.id === traumaStationFilter);
+    if (!stillValid) {
+      setTraumaStationFilter("all");
+    }
+  }, [traumaBattalionFilter, traumaStationFilter, traumaStationsForBattalionFilter]);
 
   useEffect(() => {
     if (battalionFilter === "all") return;
@@ -964,75 +1300,212 @@ export default function Home() {
     }
   }
 
+  async function handleExportTraumaPdf() {
+    setError("");
+    setSuccess("");
+    setIsExportingPdf(true);
+
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "letter" });
+      const generatedAt = new Date();
+      const battalionLabel = traumaBattalionFilter === "all"
+        ? "All Battalions"
+        : `Battalion ${traumaBattalionFilter}`;
+      const stationLabel = traumaStationFilter === "all"
+        ? "All Units"
+        : stations.find((station) => station.id === traumaStationFilter)?.name || traumaStationFilter;
+      const centerLabel = traumaCenterFilter === "all"
+        ? "All"
+        : traumaCenterFilter === "yes"
+          ? "Yes"
+          : "No";
+      const triageLabel = traumaTriageFilter === "all"
+        ? "All"
+        : traumaTriageFilter === "yes"
+          ? "Yes"
+          : "No";
+      const dateLabel = traumaStartDate || traumaEndDate
+        ? `${traumaStartDate || "Any"} to ${traumaEndDate || "Any"}`
+        : "Any Date";
+
+      doc.setFontSize(16);
+      doc.text("EMS Trauma QA Report", 40, 40);
+      doc.setFontSize(10);
+      doc.text(`Generated: ${generatedAt.toLocaleString()}`, 40, 60);
+      doc.text(
+        `Filters: Battalion=${battalionLabel} | Unit=${stationLabel} | Trauma Center=${centerLabel} | Trauma Triage=${triageLabel} | Date=${dateLabel}`,
+        40,
+        76,
+      );
+      doc.text(
+        `Summary: Total Trauma Cases=${filteredTraumaRuns.length}, Trauma Center=${traumaCenterCount}, Trauma Triage=${traumaTriageCount}`,
+        40,
+        92,
+      );
+      doc.setFontSize(9);
+      doc.setTextColor(71, 85, 105);
+      doc.text(
+        "Legend — Green: Trauma Center criteria met | Yellow: Neither criteria | Red: Trauma Triage criteria met",
+        40,
+        106,
+      );
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10);
+
+      autoTable(doc, {
+        startY: 118,
+        styles: { fontSize: 8, cellPadding: 3, valign: "top", overflow: "linebreak" },
+        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        tableLineColor: [226, 232, 240],
+        tableLineWidth: 0.2,
+        margin: { left: 24, right: 24 },
+        head: [
+          [
+            "Call Date/Time",
+            "Station / Shift",
+            "ImageTrend Incident #",
+            "Age",
+            "Trauma Center",
+            "Trauma Triage",
+            "Medications",
+            "Procedures",
+            "IV/IO Access",
+          ],
+        ],
+        body: sortedTraumaRuns.map((run) => [
+          new Date(run.callDateTime).toLocaleString(),
+          `${run.primaryResponseTerritoryName} / ${run.shift}`,
+          run.runNumber,
+          run.patientAge ?? "-",
+          formatYesNo(run.traumaCenterCriteriaSelected),
+          formatYesNo(run.traumaTriageCriteriaSelected),
+          formatTextCell(formatTraumaMedications(run)),
+          formatTextCell(formatTraumaProcedures(run)),
+          formatVascularAccess(run.vascularAccess),
+        ]),
+        columnStyles: {
+          0: { cellWidth: 72 },
+          1: { cellWidth: 70 },
+          2: { cellWidth: 42 },
+          3: { cellWidth: 22 },
+          4: { cellWidth: 36 },
+          5: { cellWidth: 36 },
+          6: { cellWidth: 90 },
+          7: { cellWidth: 90 },
+          8: { cellWidth: 72 },
+        },
+        didParseCell: (data) => {
+          if (data.section !== "body") return;
+          const run = sortedTraumaRuns[data.row.index];
+          if (!run) return;
+          if (run.traumaTriageCriteriaSelected) {
+            data.cell.styles.fillColor = [254, 226, 226];
+            data.cell.styles.textColor = [127, 29, 29];
+            return;
+          }
+          if (run.traumaCenterCriteriaSelected) {
+            data.cell.styles.fillColor = [220, 252, 231];
+            data.cell.styles.textColor = [6, 78, 59];
+            return;
+          }
+          data.cell.styles.fillColor = [254, 243, 199];
+          data.cell.styles.textColor = [146, 64, 14];
+        },
+      });
+
+      const filename = `ems-trauma-report-${toFileDate(generatedAt)}.pdf`;
+      doc.save(filename);
+      setSuccess("Trauma PDF report generated from current filters.");
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "Failed to generate trauma PDF report.");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }
+
+  async function handleExportTraumaCsv() {
+    setError("");
+    setSuccess("");
+    setIsExportingCsv(true);
+
+    try {
+      const headers = [
+        "Call Date/Time",
+        "Station / Shift",
+        "ImageTrend Incident #",
+        "Age",
+        "Trauma Center",
+        "Trauma Triage",
+        "Medications",
+        "Procedures",
+        "IV/IO Access",
+      ];
+
+      const rows = sortedTraumaRuns.map((run) => [
+        new Date(run.callDateTime).toLocaleString(),
+        `${run.primaryResponseTerritoryName} / ${run.shift}`,
+        run.runNumber,
+        run.patientAge ?? "",
+        formatYesNo(run.traumaCenterCriteriaSelected),
+        formatYesNo(run.traumaTriageCriteriaSelected),
+        formatTraumaMedications(run),
+        formatTraumaProcedures(run),
+        formatVascularAccess(run.vascularAccess),
+      ]);
+
+      downloadCsv(
+        `ems-trauma-report-${toFileDate(new Date())}.csv`,
+        [headers, ...rows],
+      );
+      setSuccess("Trauma CSV exported from current filters.");
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "Failed to export trauma CSV.");
+    } finally {
+      setIsExportingCsv(false);
+    }
+  }
+
   if (isLoading) {
-    return <main className="min-h-screen p-4 sm:p-6">Loading EMS app...</main>;
+    return <LoadingScreen />;
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-100 via-zinc-50 to-zinc-100 p-4 sm:p-6 text-zinc-900">
-      <div className="mx-auto mb-4 sm:mb-6 w-full max-w-[min(100%,110rem)] rounded-2xl bg-slate-900 p-4 sm:p-5 text-white shadow-xl">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex flex-col gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-slate-200">Operations Dashboard</p>
-              <h1 className="text-xl font-semibold md:text-2xl">
-                {activeModule === "cardiac-arrest" ? "EMS Cardiac Arrest QA" : "EMS Trauma QA"}
-              </h1>
-            </div>
-            <label className="block w-full max-w-xs text-sm">
-              <span className="text-xs uppercase tracking-wide text-slate-300">Module</span>
-              <select
-                className="mt-1 w-full rounded-lg border border-white/20 bg-white/10 p-2 text-sm text-white"
-                value={activeModule}
-                onChange={(e) => setActiveModule(e.target.value as QAModule)}
-              >
-                {moduleOptions.map((option) => (
-                  <option key={option.value} value={option.value} className="text-zinc-900">
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {activeModule === "cardiac-arrest" ? (
-            <div className="w-full md:w-auto">
-              <div className="rounded-2xl border border-white/15 bg-white/10 p-3">
-                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-6 md:text-sm">
-                  <div className="col-span-1 sm:col-span-2">
-                    <StatChip label="Total Arrests" value={String(filteredRuns.length)} />
-                  </div>
-                  <div className="col-span-1 sm:col-span-2">
-                    <StatChip label="ROSC %" value={roscPercentageText} />
-                  </div>
-                  <div className="col-span-1 sm:col-span-2">
-                    <StatChip label="ROSC" value={String(roscCount)} />
-                  </div>
-                  <div className="col-span-1 sm:col-span-3">
-                    <StatChip label="Pt's Defibrillated" value={String(defibCount)} />
-                  </div>
-                  <div className="col-span-1 sm:col-span-3">
-                    <StatChip label="QI Cases" value={String(qiCount)} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
+    <main className="app-page p-4 sm:p-6 text-zinc-900">
+      <div className="app-container mb-4 sm:mb-6">
+        <AppHeader
+          activeModule={activeModule}
+          moduleOptions={moduleOptions}
+          onModuleChange={setActiveModule}
+          stats={headerStats}
+          onSignOut={() => void handleSignOut()}
+        />
       </div>
 
+      {(error || success) ? (
+        <div className="app-container mb-4 space-y-2">
+          {error ? (
+            <StatusBanner type="error" message={error} onDismiss={() => setError("")} />
+          ) : null}
+          {success ? (
+            <StatusBanner type="success" message={success} onDismiss={() => setSuccess("")} />
+          ) : null}
+        </div>
+      ) : null}
+
       {activeModule === "cardiac-arrest" ? (
-      <div className="mx-auto grid w-full max-w-[min(100%,110rem)] gap-4 sm:gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-1">
-          <h2 className="text-xl font-semibold">New EMS Run</h2>
-          <p className="mt-1 text-sm text-zinc-600">
+      <div className="app-container grid gap-4 sm:gap-6 lg:grid-cols-3">
+        <section className="card card-form-scroll lg:col-span-1">
+          <h2 className="card-title">New EMS Run</h2>
+          <p className="card-description">
             Manual entry by station, run number, shift, outcome category, ROSC, and items used.
           </p>
 
           <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
-            <label className="block text-sm">
+            <label className="field-label">
               Battalion
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={battalion}
                 onChange={(e) => {
                   const next = e.target.value as Battalion;
@@ -1055,10 +1528,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Primary Response Territory
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={primaryResponseTerritoryId}
                 onChange={(e) => setPrimaryResponseTerritoryId(e.target.value)}
                 required
@@ -1071,10 +1544,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Shift
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={shift}
                 onChange={(e) => setShift(e.target.value as Shift)}
               >
@@ -1086,10 +1559,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               ImageTrend Incident Link
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={imageTrendIncidentLink}
                 onChange={(e) => setImageTrendIncidentLink(e.target.value)}
                 placeholder="Paste full ImageTrend incident link"
@@ -1097,10 +1570,10 @@ export default function Home() {
               />
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Call Date/Time
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 type="datetime-local"
                 value={callDateTime}
                 onChange={(e) => setCallDateTime(e.target.value)}
@@ -1108,10 +1581,10 @@ export default function Home() {
               />
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Patient Age
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 type="number"
                 min={0}
                 value={patientAge}
@@ -1120,8 +1593,8 @@ export default function Home() {
               />
             </label>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Arrest witnessed?</p>
+            <div className="form-panel">
+              <p className="form-panel-title">Arrest witnessed?</p>
               <div className="mt-2 flex flex-wrap gap-4 text-sm">
                 {arrestWitnessOptions.map((option) => (
                   <label key={option.value} className="flex cursor-pointer items-center gap-2">
@@ -1136,11 +1609,11 @@ export default function Home() {
                   </label>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-zinc-500">Check one or leave both unchecked.</p>
+              <p className="form-panel-hint">Check one or leave both unchecked.</p>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Patient disposition</p>
+            <div className="form-panel">
+              <p className="form-panel-title">Patient disposition</p>
               <div className="mt-2 flex flex-wrap gap-4 text-sm">
                 {patientDispositionOptions.map((option) => (
                   <label key={option.value} className="flex cursor-pointer items-center gap-2">
@@ -1153,11 +1626,11 @@ export default function Home() {
                   </label>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-zinc-500">Check one or leave all unchecked.</p>
+              <p className="form-panel-hint">Check one or leave all unchecked.</p>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Patient age group</p>
+            <div className="form-panel">
+              <p className="form-panel-title">Patient age group</p>
               <div className="mt-2 flex flex-wrap gap-4 text-sm">
                 {patientAgeOptions.map((option) => (
                   <label key={option.value} className="flex cursor-pointer items-center gap-2">
@@ -1172,7 +1645,7 @@ export default function Home() {
                   </label>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-zinc-500">Check one or leave all unchecked.</p>
+              <p className="form-panel-hint">Check one or leave all unchecked.</p>
             </div>
 
             <label className="flex items-center gap-2 text-sm">
@@ -1180,7 +1653,7 @@ export default function Home() {
               ROSC achieved
             </label>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+            <div className="form-panel">
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input
                   type="checkbox"
@@ -1193,7 +1666,7 @@ export default function Home() {
                 <label className="mt-2 block text-sm">
                   Number of defibrillations
                   <input
-                    className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                    className="field-input"
                     type="number"
                     min={1}
                     value={defibrillationCount}
@@ -1203,8 +1676,8 @@ export default function Home() {
               )}
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Airway adjunct</p>
+            <div className="form-panel">
+              <p className="form-panel-title">Airway adjunct</p>
               <div className="mt-2 flex flex-wrap gap-4 text-sm">
                 {airwayAdjunctOptions.map((option) => (
                   <label key={option.value} className="flex cursor-pointer items-center gap-2">
@@ -1221,10 +1694,10 @@ export default function Home() {
                 {airwayAdjunctOptions
                   .filter((option) => option.value !== "bvm" && airwayAdjuncts[option.value])
                   .map((option) => (
-                    <label key={`${option.value}-size`} className="block text-sm">
+                    <label key={`${option.value}-size`} className="field-label">
                       {option.label} size
                       <input
-                        className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                        className="field-input"
                         value={airwayAdjunctSizes[option.value]}
                         onChange={(e) =>
                           setAirwayAdjunctSizes((prev) => ({ ...prev, [option.value]: e.target.value }))
@@ -1236,11 +1709,11 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">IV or IO access</p>
+            <div className="form-panel">
+              <p className="form-panel-title">IV or IO access</p>
               <div className="mt-2 grid gap-2 md:grid-cols-4">
                 <select
-                  className="rounded-lg border border-zinc-300 p-2 text-sm"
+                  className="field-input-sm"
                   value={accessTypeInput}
                   onChange={(e) => setAccessTypeInput(e.target.value as "iv" | "io")}
                 >
@@ -1248,7 +1721,7 @@ export default function Home() {
                   <option value="io">IO</option>
                 </select>
                 <select
-                  className="rounded-lg border border-zinc-300 p-2 text-sm"
+                  className="field-input-sm"
                   value={accessLocationInput}
                   onChange={(e) => setAccessLocationInput(e.target.value)}
                 >
@@ -1271,14 +1744,14 @@ export default function Home() {
                 </select>
                 {accessTypeInput === "iv" && accessLocationInput === "other" ? (
                   <input
-                    className="rounded-lg border border-zinc-300 p-2 text-sm"
+                    className="field-input-sm"
                     value={accessLocationOtherInput}
                     onChange={(e) => setAccessLocationOtherInput(e.target.value)}
                     placeholder="Enter location"
                   />
                 ) : (
                   <select
-                    className="rounded-lg border border-zinc-300 p-2 text-sm"
+                    className="field-input-sm"
                     value={accessSizeInput}
                     onChange={(e) => setAccessSizeInput(e.target.value)}
                   >
@@ -1301,7 +1774,7 @@ export default function Home() {
                 )}
                 {accessTypeInput === "iv" && accessLocationInput === "other" ? (
                   <select
-                    className="rounded-lg border border-zinc-300 p-2 text-sm"
+                    className="field-input-sm"
                     value={accessSizeInput}
                     onChange={(e) => setAccessSizeInput(e.target.value)}
                   >
@@ -1314,7 +1787,7 @@ export default function Home() {
                   </select>
                 ) : null}
                 <button
-                  className="rounded-lg bg-zinc-900 px-3 text-sm text-white"
+                  className="btn-toolbar-primary text-sm"
                   type="button"
                   onClick={addVascularAccess}
                 >
@@ -1327,7 +1800,7 @@ export default function Home() {
                     <span>{entry.type.toUpperCase()} - {entry.location} ({entry.size})</span>
                     <button
                       type="button"
-                      className="rounded border border-zinc-300 bg-white px-2 py-0.5 text-xs hover:bg-zinc-100"
+                      className="btn-action"
                       onClick={() => removeVascularAccessAt(index)}
                     >
                       Remove
@@ -1348,11 +1821,11 @@ export default function Home() {
               </label>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Medications administered</p>
+            <div className="form-panel">
+              <p className="form-panel-title">Medications administered</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <select
-                  className="min-w-40 flex-1 rounded-lg border border-zinc-300 p-2 text-sm"
+                  className="field-input-sm min-w-40 flex-1"
                   value={selectedMedicationId}
                   onChange={(e) => setSelectedMedicationId(e.target.value)}
                 >
@@ -1361,20 +1834,20 @@ export default function Home() {
                   ))}
                 </select>
                 <input
-                  className="min-w-28 flex-1 rounded-lg border border-zinc-300 p-2 text-sm"
+                  className="field-input-sm min-w-28 flex-1"
                   value={selectedMedicationAmount}
                   onChange={(e) => setSelectedMedicationAmount(e.target.value)}
-                  placeholder="Amount (e.g. 1 mg)"
+                  placeholder="Dosage (e.g. 1 mg)"
                 />
                 <input
-                  className="w-24 rounded-lg border border-zinc-300 p-2 text-sm"
+                  className="field-input-sm w-24"
                   type="number"
                   min={1}
                   value={selectedMedicationAdministrations}
                   onChange={(e) => setSelectedMedicationAdministrations(Number(e.target.value))}
                   title="Number of administrations"
                 />
-                <button className="rounded-lg bg-zinc-900 px-3 text-sm text-white" type="button" onClick={addMedication}>
+                <button className="btn-toolbar-primary text-sm" type="button" onClick={addMedication}>
                   Add Med
                 </button>
               </div>
@@ -1384,7 +1857,7 @@ export default function Home() {
                     <span>{entry.medicationName}: {entry.amount} (x{entry.administrations})</span>
                     <button
                       type="button"
-                      className="rounded border border-zinc-300 bg-white px-2 py-0.5 text-xs hover:bg-zinc-100"
+                      className="btn-action"
                       onClick={() => removeMedicationAt(index)}
                     >
                       Remove
@@ -1395,7 +1868,7 @@ export default function Home() {
               <label className="mt-2 block text-sm">
                 Other medication/details
                 <input
-                  className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                  className="field-input"
                   value={medicationOtherText}
                   onChange={(e) => setMedicationOtherText(e.target.value)}
                   placeholder="Anything outside preset list"
@@ -1403,13 +1876,13 @@ export default function Home() {
               </label>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Critical intervention times</p>
+            <div className="form-panel">
+              <p className="form-panel-title">Critical intervention times</p>
               <div className="mt-2 grid gap-2 md:grid-cols-3">
                 <label className="text-sm">
                   Time of defib pads applied
                   <input
-                    className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                    className="field-input"
                     type="time"
                     value={defibPadsAppliedTime}
                     onChange={(e) => setDefibPadsAppliedTime(e.target.value)}
@@ -1418,7 +1891,7 @@ export default function Home() {
                 <label className="text-sm">
                   Time to compressions
                   <input
-                    className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                    className="field-input"
                     type="time"
                     value={compressionsStartedTime}
                     onChange={(e) => setCompressionsStartedTime(e.target.value)}
@@ -1427,7 +1900,7 @@ export default function Home() {
                 <label className="text-sm">
                   Time to defibrillation
                   <input
-                    className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                    className="field-input"
                     type="time"
                     value={defibrillationTime}
                     onChange={(e) => setDefibrillationTime(e.target.value)}
@@ -1436,12 +1909,12 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm font-medium">ZOLL record / rhythm strip</p>
+            <div className="form-panel">
+              <p className="form-panel-title">ZOLL record / rhythm strip</p>
               <label className="mt-2 block text-sm">
                 ZOLL EKG record link
                 <input
-                  className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                  className="field-input"
                   type="url"
                   value={zollRecordLink}
                   onChange={(e) => setZollRecordLink(e.target.value)}
@@ -1451,7 +1924,7 @@ export default function Home() {
               <label className="mt-2 block text-sm">
                 Upload rhythm strip image
                 <input
-                  className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                  className="field-input"
                   type="file"
                   accept="image/*"
                   onChange={(e) => void handleRhythmStripUpload(e.target.files?.[0] ?? null)}
@@ -1462,17 +1935,17 @@ export default function Home() {
               )}
             </div>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Written incident summary
               <textarea
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 rows={4}
                 value={incidentSummary}
                 onChange={(e) => setIncidentSummary(e.target.value)}
               />
             </label>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+            <div className="form-panel">
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input
                   type="checkbox"
@@ -1485,7 +1958,7 @@ export default function Home() {
                 <label className="mt-2 block text-sm">
                   QI summary / referral details
                   <textarea
-                    className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                    className="field-input"
                     rows={3}
                     value={qiIssueSummary}
                     onChange={(e) => setQiIssueSummary(e.target.value)}
@@ -1494,11 +1967,9 @@ export default function Home() {
               )}
             </div>
 
-            {error && activeModule === "cardiac-arrest" ? <p className="text-sm text-red-600">{error}</p> : null}
-            {success && activeModule === "cardiac-arrest" ? <p className="text-sm text-green-600">{success}</p> : null}
 
             <button
-              className="w-full rounded-lg bg-red-700 p-2.5 font-medium text-white shadow disabled:opacity-60"
+              className="btn-submit w-full"
               type="submit"
               disabled={isSaving}
             >
@@ -1507,13 +1978,14 @@ export default function Home() {
           </form>
         </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-2">
-          <h2 className="text-xl font-semibold">Unit Dashboard</h2>
+        <section className="card lg:col-span-2">
+          <h2 className="card-title">Unit Dashboard</h2>
+          <p className="card-description">Review, filter, and export QA records for your organization.</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
-            <label className="text-sm text-zinc-700">
+            <label className="field-label-filter">
               Battalion Filter
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={battalionFilter}
                 onChange={(e) => setBattalionFilter(e.target.value as "all" | Battalion)}
               >
@@ -1526,10 +1998,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="text-sm text-zinc-700">
+            <label className="field-label-filter">
               Unit Filter
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={stationFilter}
                 onChange={(e) => setStationFilter(e.target.value)}
               >
@@ -1542,10 +2014,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="text-sm text-zinc-700">
+            <label className="field-label-filter">
               ROSC Filter
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={roscFilter}
                 onChange={(e) => setRoscFilter(e.target.value as RoscFilter)}
               >
@@ -1555,20 +2027,20 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="text-sm text-zinc-700">
+            <label className="field-label-filter">
               Start Date
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </label>
 
-            <label className="text-sm text-zinc-700">
+            <label className="field-label-filter">
               End Date
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
@@ -1588,14 +2060,14 @@ export default function Home() {
               />
               <button
                 type="button"
-                className="h-10 shrink-0 whitespace-nowrap rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-700"
+                className="btn-toolbar-secondary"
                 onClick={clearDashboardFilters}
               >
                 Clear Filters
               </button>
               <button
                 type="button"
-                className="h-10 shrink-0 whitespace-nowrap rounded-lg bg-slate-900 px-3 text-sm font-medium text-white disabled:opacity-60"
+                className="btn-toolbar-primary"
                 onClick={() => importInputRef.current?.click()}
                 disabled={isImportingCsv || isExportingPdf || isExportingCsv}
                 title="Import runs from a CSV exported from Excel"
@@ -1605,7 +2077,7 @@ export default function Home() {
               <div className="relative">
                 <button
                   type="button"
-                  className="h-10 shrink-0 whitespace-nowrap rounded-lg bg-slate-900 px-3 text-sm font-medium text-white disabled:opacity-60"
+                  className="btn-toolbar-primary"
                   onClick={() => setIsExportMenuOpen((prev) => !prev)}
                   disabled={isExportingPdf || isExportingCsv}
                   aria-haspopup="menu"
@@ -1614,22 +2086,23 @@ export default function Home() {
                   {isExportingPdf || isExportingCsv ? "Exporting…" : "Export"}
                 </button>
 
-                {isExportMenuOpen && (
-                  <div
-                    className="fixed inset-0 z-40"
-                    role="presentation"
-                    onClick={() => setIsExportMenuOpen(false)}
-                  >
+                {isExportMenuOpen ? (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      role="presentation"
+                      onClick={() => setIsExportMenuOpen(false)}
+                    />
                     <div
                       role="menu"
                       aria-label="Export options"
-                      className="absolute right-0 top-12 z-50 w-48 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg"
+                      className="export-menu"
                       onClick={(event) => event.stopPropagation()}
                     >
                       <button
                         type="button"
                         role="menuitem"
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50"
+                        className="export-menu-item"
                         onClick={() => {
                           setIsExportMenuOpen(false);
                           void handleExportPdf();
@@ -1640,7 +2113,7 @@ export default function Home() {
                       <button
                         type="button"
                         role="menuitem"
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50"
+                        className="export-menu-item"
                         onClick={() => {
                           setIsExportMenuOpen(false);
                           void handleExportCsv();
@@ -1649,8 +2122,8 @@ export default function Home() {
                         Export CSV (Excel)
                       </button>
                     </div>
-                  </div>
-                )}
+                  </>
+                ) : null}
               </div>
             </div>
             {importProgressText ? (
@@ -1659,7 +2132,7 @@ export default function Home() {
           </div>
 
           <div className="mt-4 w-full overflow-x-auto">
-            <table className="min-w-full border-collapse text-left text-sm">
+            <table className="data-table">
               <thead>
                 <tr className="border-b border-zinc-200">
                   <th className="p-2">Date/Time</th>
@@ -1690,7 +2163,7 @@ export default function Home() {
                           href={getImageTrendHref(run.runNumber, run.imageTrendIncidentLink)!}
                           target="_blank"
                           rel="noreferrer"
-                          className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                          className="link-incident"
                           title="Open ImageTrend incident"
                           onClick={(event) => event.stopPropagation()}
                         >
@@ -1735,14 +2208,14 @@ export default function Home() {
                       <div className="flex flex-wrap gap-1.5">
                         <button
                           type="button"
-                          className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-800 hover:bg-slate-100"
+                          className="btn-action"
                           onClick={() => setNotesRun(run)}
                         >
                           Notes
                         </button>
                         <button
                           type="button"
-                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+                          className="btn-action btn-action-danger disabled:opacity-50"
                           disabled={deletingId === run.id}
                           onClick={() => void handleDeleteRun(run)}
                         >
@@ -1765,18 +2238,18 @@ export default function Home() {
         </section>
       </div>
       ) : (
-      <div className="mx-auto grid w-full max-w-[min(100%,110rem)] gap-4 sm:gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-1">
-          <h2 className="text-xl font-semibold">New Trauma Run</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            Enter trauma run details. Additional trauma-specific fields will be added below Patient Age.
+      <div className="app-container grid gap-4 sm:gap-6 lg:grid-cols-3">
+        <section className="card card-form-scroll lg:col-span-1">
+          <h2 className="card-title">New Trauma Run</h2>
+          <p className="card-description">
+            Document trauma encounters with triage criteria, treatments, and vascular access.
           </p>
 
           <form className="mt-4 space-y-3" onSubmit={handleTraumaSubmit}>
-            <label className="block text-sm">
+            <label className="field-label">
               Battalion
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={traumaBattalion}
                 onChange={(e) => {
                   const next = e.target.value as Battalion;
@@ -1799,10 +2272,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Primary Response Territory
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={traumaPrimaryResponseTerritoryId}
                 onChange={(e) => setTraumaPrimaryResponseTerritoryId(e.target.value)}
                 required
@@ -1815,10 +2288,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Shift
               <select
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={traumaShift}
                 onChange={(e) => setTraumaShift(e.target.value as Shift)}
               >
@@ -1830,10 +2303,10 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               ImageTrend Incident Link
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 value={traumaImageTrendIncidentLink}
                 onChange={(e) => setTraumaImageTrendIncidentLink(e.target.value)}
                 placeholder="Paste full ImageTrend incident link"
@@ -1841,10 +2314,10 @@ export default function Home() {
               />
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Call Date/Time
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 type="datetime-local"
                 value={traumaCallDateTime}
                 onChange={(e) => setTraumaCallDateTime(e.target.value)}
@@ -1852,10 +2325,10 @@ export default function Home() {
               />
             </label>
 
-            <label className="block text-sm">
+            <label className="field-label">
               Patient Age
               <input
-                className="mt-1 w-full rounded-lg border border-zinc-300 p-2"
+                className="field-input"
                 type="number"
                 min={0}
                 value={traumaPatientAge}
@@ -1864,11 +2337,238 @@ export default function Home() {
               />
             </label>
 
-            {error && activeModule === "trauma" ? <p className="text-sm text-red-600">{error}</p> : null}
-            {success && activeModule === "trauma" ? <p className="text-sm text-green-600">{success}</p> : null}
+            <div className="form-panel">
+              <p className="form-panel-title">Trauma criteria</p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <label className="field-label">
+                  Trauma Center
+                  <select
+                    className="field-input"
+                    value={traumaCenterCriteria}
+                    onChange={(e) => setTraumaCenterCriteria(e.target.value as "" | "yes" | "no")}
+                    required
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </label>
+                <label className="field-label">
+                  Trauma Triage
+                  <select
+                    className="field-input"
+                    value={traumaTriageCriteria}
+                    onChange={(e) => setTraumaTriageCriteria(e.target.value as "" | "yes" | "no")}
+                    required
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="form-panel">
+              <p className="form-panel-title">Medications administered</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <select
+                  className="field-input-sm min-w-40 flex-1"
+                  value={traumaSelectedMedicationId}
+                  onChange={(e) => setTraumaSelectedMedicationId(e.target.value)}
+                >
+                  {traumaMedicationOptions.map((med) => (
+                    <option key={med.id} value={med.id}>{med.name}</option>
+                  ))}
+                </select>
+                <input
+                  className="field-input-sm min-w-28 flex-1"
+                  value={traumaSelectedMedicationDosage}
+                  onChange={(e) => setTraumaSelectedMedicationDosage(e.target.value)}
+                  placeholder="Dosage (e.g. 1 g, 2 units)"
+                />
+                <button
+                  className="btn-toolbar-primary text-sm"
+                  type="button"
+                  onClick={addTraumaMedication}
+                >
+                  Add Med
+                </button>
+              </div>
+              <ul className="mt-2 space-y-1 text-sm text-zinc-700">
+                {traumaMedicationsAdministered.map((entry, index) => (
+                  <li key={`${entry.medicationId}-${index}`} className="flex justify-between gap-2">
+                    <span>{entry.medicationName}: {entry.amount}</span>
+                    <button
+                      type="button"
+                      className="btn-action"
+                      onClick={() => removeTraumaMedicationAt(index)}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <label className="mt-2 block text-sm">
+                Other medication/details
+                <input
+                  className="field-input"
+                  value={traumaMedicationOtherText}
+                  onChange={(e) => setTraumaMedicationOtherText(e.target.value)}
+                  placeholder="Anything outside preset list"
+                />
+              </label>
+            </div>
+
+            <div className="form-panel">
+              <p className="form-panel-title">Procedures</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <select
+                  className="field-input-sm min-w-48 flex-1"
+                  value={traumaSelectedProcedureId}
+                  onChange={(e) => setTraumaSelectedProcedureId(e.target.value)}
+                >
+                  {traumaProcedureOptions.map((proc) => (
+                    <option key={proc.id} value={proc.id}>{proc.name}</option>
+                  ))}
+                </select>
+                <button
+                  className="btn-toolbar-primary text-sm"
+                  type="button"
+                  onClick={addTraumaProcedure}
+                >
+                  Add Procedure
+                </button>
+              </div>
+              <ul className="mt-2 space-y-1 text-sm text-zinc-700">
+                {traumaProceduresPerformed.map((entry, index) => (
+                  <li key={`${entry.procedureId}-${index}`} className="flex justify-between gap-2">
+                    <span>{entry.procedureName}</span>
+                    <button
+                      type="button"
+                      className="btn-action"
+                      onClick={() => removeTraumaProcedureAt(index)}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <label className="mt-2 block text-sm">
+                Other procedure/details
+                <input
+                  className="field-input"
+                  value={traumaProcedureOtherText}
+                  onChange={(e) => setTraumaProcedureOtherText(e.target.value)}
+                  placeholder="Anything outside preset list"
+                />
+              </label>
+            </div>
+
+            <div className="form-panel">
+              <p className="form-panel-title">IV or IO access</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <select
+                  className="field-input-sm"
+                  value={traumaAccessTypeInput}
+                  onChange={(e) => setTraumaAccessTypeInput(e.target.value as "iv" | "io")}
+                >
+                  <option value="iv">IV</option>
+                  <option value="io">IO</option>
+                </select>
+                <select
+                  className="field-input-sm"
+                  value={traumaAccessLocationInput}
+                  onChange={(e) => setTraumaAccessLocationInput(e.target.value)}
+                >
+                  <option value="">Location</option>
+                  {traumaAccessTypeInput === "iv" ? (
+                    <>
+                      <option value="AC">AC</option>
+                      <option value="Forearm">Forearm</option>
+                      <option value="EJ">EJ</option>
+                      <option value="Wrist">Wrist</option>
+                      <option value="other">Other</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Proximal Tibia">Proximal Tibia</option>
+                      <option value="Distal Tibia">Distal Tibia</option>
+                      <option value="Humerus">Humerus</option>
+                    </>
+                  )}
+                </select>
+                {traumaAccessTypeInput === "iv" && traumaAccessLocationInput === "other" ? (
+                  <input
+                    className="field-input-sm"
+                    value={traumaAccessLocationOtherInput}
+                    onChange={(e) => setTraumaAccessLocationOtherInput(e.target.value)}
+                    placeholder="Enter location"
+                  />
+                ) : (
+                  <select
+                    className="field-input-sm"
+                    value={traumaAccessSizeInput}
+                    onChange={(e) => setTraumaAccessSizeInput(e.target.value)}
+                  >
+                    <option value="">Size</option>
+                    {traumaAccessTypeInput === "iv" ? (
+                      <>
+                        <option value="16">16</option>
+                        <option value="18">18</option>
+                        <option value="20">20</option>
+                        <option value="22">22</option>
+                        <option value="24">24</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="25">25</option>
+                        <option value="45">45</option>
+                      </>
+                    )}
+                  </select>
+                )}
+                {traumaAccessTypeInput === "iv" && traumaAccessLocationInput === "other" ? (
+                  <select
+                    className="field-input-sm"
+                    value={traumaAccessSizeInput}
+                    onChange={(e) => setTraumaAccessSizeInput(e.target.value)}
+                  >
+                    <option value="">IV Size</option>
+                    <option value="16">16</option>
+                    <option value="18">18</option>
+                    <option value="20">20</option>
+                    <option value="22">22</option>
+                    <option value="24">24</option>
+                  </select>
+                ) : null}
+                <button
+                  className="btn-toolbar-primary text-sm"
+                  type="button"
+                  onClick={addTraumaVascularAccess}
+                >
+                  Add Access
+                </button>
+              </div>
+              <ul className="mt-2 space-y-1 text-sm text-zinc-700">
+                {traumaVascularAccess.map((entry, index) => (
+                  <li key={`${entry.type}-${entry.location}-${entry.size}-${index}`} className="flex justify-between gap-2">
+                    <span>{entry.type.toUpperCase()} - {entry.location} ({entry.size})</span>
+                    <button
+                      type="button"
+                      className="btn-action"
+                      onClick={() => removeTraumaVascularAccessAt(index)}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
 
             <button
-              className="w-full rounded-lg bg-red-700 p-2.5 font-medium text-white shadow disabled:opacity-60"
+              className="btn-submit w-full"
               type="submit"
               disabled={isSavingTrauma}
             >
@@ -1877,14 +2577,174 @@ export default function Home() {
           </form>
         </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-md lg:col-span-2">
-          <h2 className="text-xl font-semibold">Trauma Dashboard</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            {sortedTraumaRuns.length} trauma run{sortedTraumaRuns.length === 1 ? "" : "s"} recorded.
-          </p>
+        <section className="card lg:col-span-2">
+          <h2 className="card-title">Unit Dashboard</h2>
+          <p className="card-description">Review, filter, and export QA records for your organization.</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
+            <label className="field-label-filter">
+              Battalion Filter
+              <select
+                className="field-input"
+                value={traumaBattalionFilter}
+                onChange={(e) => setTraumaBattalionFilter(e.target.value as "all" | Battalion)}
+              >
+                <option value="all">All Battalions</option>
+                {battalionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field-label-filter">
+              Unit Filter
+              <select
+                className="field-input"
+                value={traumaStationFilter}
+                onChange={(e) => setTraumaStationFilter(e.target.value)}
+              >
+                <option value="all">All Units</option>
+                {traumaStationsForBattalionFilter.map((station) => (
+                  <option key={station.id} value={station.id}>
+                    {station.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="field-label-filter">
+              <span className="block">Criteria Filters</span>
+              <div className="filter-criteria-grid">
+                <select
+                  className="field-input-compact"
+                  value={traumaCenterFilter}
+                  onChange={(e) => setTraumaCenterFilter(e.target.value as RoscFilter)}
+                  aria-label="Trauma Center Filter"
+                >
+                  <option value="all">Center: All</option>
+                  <option value="yes">Center: Yes</option>
+                  <option value="no">Center: No</option>
+                </select>
+                <select
+                  className="field-input-compact"
+                  value={traumaTriageFilter}
+                  onChange={(e) => setTraumaTriageFilter(e.target.value as RoscFilter)}
+                  aria-label="Trauma Triage Filter"
+                >
+                  <option value="all">Triage: All</option>
+                  <option value="yes">Triage: Yes</option>
+                  <option value="no">Triage: No</option>
+                </select>
+              </div>
+            </div>
+
+            <label className="field-label-filter">
+              Start Date
+              <input
+                className="field-input"
+                type="date"
+                value={traumaStartDate}
+                onChange={(e) => setTraumaStartDate(e.target.value)}
+              />
+            </label>
+
+            <label className="field-label-filter">
+              End Date
+              <input
+                className="field-input"
+                type="date"
+                value={traumaEndDate}
+                onChange={(e) => setTraumaEndDate(e.target.value)}
+              />
+            </label>
+
+            <div className="mt-4 flex flex-wrap items-end gap-2 xl:col-span-2 sm:flex-nowrap">
+              <input
+                ref={traumaImportInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (file) void handleImportCsvFile(file, "trauma");
+                }}
+              />
+              <button
+                type="button"
+                className="btn-toolbar-secondary"
+                onClick={clearTraumaDashboardFilters}
+              >
+                Clear Filters
+              </button>
+              <button
+                type="button"
+                className="btn-toolbar-primary"
+                onClick={() => traumaImportInputRef.current?.click()}
+                disabled={isImportingCsv || isExportingPdf || isExportingCsv}
+                title="Import trauma runs from a CSV exported from Excel"
+              >
+                {isImportingCsv ? "Importing…" : "Import CSV"}
+              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  className="btn-toolbar-primary"
+                  onClick={() => setIsTraumaExportMenuOpen((prev) => !prev)}
+                  disabled={isExportingPdf || isExportingCsv}
+                  aria-haspopup="menu"
+                  aria-expanded={isTraumaExportMenuOpen}
+                >
+                  {isExportingPdf || isExportingCsv ? "Exporting…" : "Export"}
+                </button>
+
+                {isTraumaExportMenuOpen ? (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      role="presentation"
+                      onClick={() => setIsTraumaExportMenuOpen(false)}
+                    />
+                    <div
+                      role="menu"
+                      aria-label="Trauma export options"
+                      className="export-menu"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="export-menu-item"
+                        onClick={() => {
+                          setIsTraumaExportMenuOpen(false);
+                          void handleExportTraumaPdf();
+                        }}
+                      >
+                        Export PDF
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="export-menu-item"
+                        onClick={() => {
+                          setIsTraumaExportMenuOpen(false);
+                          void handleExportTraumaCsv();
+                        }}
+                      >
+                        Export CSV (Excel)
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+            {importProgressText && activeModule === "trauma" ? (
+              <p className="mt-2 text-xs text-zinc-600 xl:col-span-7">{importProgressText}</p>
+            ) : null}
+          </div>
 
           <div className="mt-4 w-full overflow-x-auto">
-            <table className="min-w-full border-collapse text-left text-sm">
+            <table className="data-table">
               <thead>
                 <tr className="border-b border-zinc-200">
                   <th className="p-2">Date/Time</th>
@@ -1892,21 +2752,32 @@ export default function Home() {
                   <th className="p-2">ImageTrend Incident #</th>
                   <th className="hidden p-2 md:table-cell">Patient Age</th>
                   <th className="hidden p-2 md:table-cell">Shift</th>
+                  <th className="hidden p-2 lg:table-cell">Center Det.</th>
+                  <th className="hidden p-2 lg:table-cell">Triage Det.</th>
+                  <th className="hidden p-2 sm:table-cell">Category</th>
+                  <th className="p-2">Center</th>
+                  <th className="hidden p-2 sm:table-cell">Triage</th>
                   <th className="p-2 min-w-[9.5rem]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedTraumaRuns.map((run) => (
-                  <tr key={run.id} className="border-b border-zinc-100 hover:bg-zinc-50/90">
+                  <tr
+                    key={run.id}
+                    className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50/90"
+                    onClick={() => setNotesRun(run)}
+                  >
                     <td className="p-2">{new Date(run.callDateTime).toLocaleString()}</td>
                     <td className="hidden p-2 sm:table-cell">{run.primaryResponseTerritoryName}</td>
-                    <td className="p-2">
+                    <td className="p-2" onClick={(event) => event.stopPropagation()}>
                       {getImageTrendHref(run.runNumber, run.imageTrendIncidentLink) ? (
                         <a
                           href={getImageTrendHref(run.runNumber, run.imageTrendIncidentLink)!}
                           target="_blank"
                           rel="noreferrer"
-                          className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                          className="link-incident"
+                          title="Open ImageTrend incident"
+                          onClick={(event) => event.stopPropagation()}
                         >
                           {getIncidentDisplayNumber(run.runNumber, run.imageTrendIncidentLink)}
                         </a>
@@ -1918,22 +2789,62 @@ export default function Home() {
                     </td>
                     <td className="hidden p-2 md:table-cell">{run.patientAge ?? "—"}</td>
                     <td className="hidden p-2 md:table-cell">{run.shift}</td>
+                    <td className="hidden p-2 text-zinc-700 lg:table-cell">
+                      {formatYesNo(run.traumaCenterCriteriaSelected)}
+                    </td>
+                    <td className="hidden p-2 text-zinc-700 lg:table-cell">
+                      {formatYesNo(run.traumaTriageCriteriaSelected)}
+                    </td>
+                    <td className="hidden p-2 sm:table-cell">
+                      <Badge tone="amber">Trauma</Badge>
+                    </td>
                     <td className="p-2">
-                      <button
-                        type="button"
-                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
-                        disabled={deletingId === run.id}
-                        onClick={() => void handleDeleteRun(run)}
+                      <span
+                        className={
+                          run.traumaCenterCriteriaSelected
+                            ? "rounded-md bg-emerald-100 px-2 py-1 text-emerald-700"
+                            : "rounded-md bg-red-100 px-2 py-1 text-red-700"
+                        }
                       >
-                        {deletingId === run.id ? "Deleting…" : "Delete"}
-                      </button>
+                        {run.traumaCenterCriteriaSelected ? "Yes" : "No"}
+                      </span>
+                    </td>
+                    <td className="hidden p-2 sm:table-cell">
+                      <span
+                        className={
+                          run.traumaTriageCriteriaSelected
+                            ? "rounded-md bg-red-100 px-2 py-1 text-red-700"
+                            : "rounded-md px-2 py-1 text-zinc-600"
+                        }
+                      >
+                        {run.traumaTriageCriteriaSelected ? "Yes" : "No"}
+                      </span>
+                    </td>
+                    <td className="p-2" onClick={(event) => event.stopPropagation()}>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          className="btn-action"
+                          onClick={() => setNotesRun(run)}
+                        >
+                          Notes
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-action btn-action-danger disabled:opacity-50"
+                          disabled={deletingId === run.id}
+                          onClick={() => void handleDeleteRun(run)}
+                        >
+                          {deletingId === run.id ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {sortedTraumaRuns.length === 0 && (
                   <tr>
-                    <td className="p-4 text-center text-zinc-500" colSpan={6}>
-                      No trauma runs recorded yet.
+                    <td className="p-4 text-center text-zinc-500" colSpan={11}>
+                      No calls match the selected filters.
                     </td>
                   </tr>
                 )}
@@ -1944,29 +2855,101 @@ export default function Home() {
       </div>
       )}
 
-      {notesRun && activeModule === "cardiac-arrest" && (
+      {notesRun && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          className="modal-overlay"
           role="presentation"
           onClick={() => setNotesRun(null)}
         >
           <div
-            className="max-h-[min(80vh,28rem)] w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl"
+            className="modal-panel max-h-[min(80vh,28rem)] max-w-lg overflow-hidden"
             role="dialog"
             aria-modal="true"
             aria-labelledby="run-notes-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="border-b border-zinc-100 px-4 py-3">
-              <h3 id="run-notes-title" className="text-base font-semibold text-zinc-900">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h3 id="run-notes-title" className="text-base font-semibold text-slate-900">
                 Incident details
               </h3>
-              <p className="mt-1 text-sm text-zinc-600">
+              <p className="mt-1 text-sm text-slate-500">
                 {notesRun.primaryResponseTerritoryName} · Incident {notesRun.runNumber} ·{" "}
                 {new Date(notesRun.callDateTime).toLocaleString()}
               </p>
             </div>
             <div className="max-h-[min(60vh,20rem)] space-y-4 overflow-y-auto px-4 py-3">
+              {notesRun.runType === "trauma" ? (
+                <>
+                  <div className="text-sm">
+                    <p className="font-medium text-zinc-700">Trauma</p>
+                    <p className="mt-1 text-zinc-800">
+                      Territory: {notesRun.primaryResponseTerritoryName} · Shift: {notesRun.shift} ·
+                      Patient age: {notesRun.patientAge ?? "—"}
+                    </p>
+                    <p className="mt-1 text-zinc-800">
+                      Trauma Center criteria: {formatYesNo(notesRun.traumaCenterCriteriaSelected)} ·
+                      Trauma Triage criteria: {formatYesNo(notesRun.traumaTriageCriteriaSelected)}
+                    </p>
+                  </div>
+                  {(notesRun.medicationsAdministered?.length > 0 || !!notesRun.traumaMedicationsText?.trim()) && (
+                    <div className="text-sm">
+                      <p className="font-medium text-zinc-700">Medications administered</p>
+                      {notesRun.medicationsAdministered?.length > 0 ? (
+                        <ul className="mt-1 list-inside list-disc text-zinc-800">
+                          {notesRun.medicationsAdministered.map((med, idx) => (
+                            <li key={`${med.medicationId}-${idx}`}>
+                              {med.medicationName}: {med.amount}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap text-zinc-800">
+                          {notesRun.traumaMedicationsText}
+                        </p>
+                      )}
+                      {!!notesRun.medicationOtherText && (
+                        <p className="mt-1 text-zinc-800">
+                          Other: {notesRun.medicationOtherText}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {((notesRun.traumaProcedures?.length ?? 0) > 0 || !!notesRun.traumaProceduresText?.trim()) && (
+                    <div className="text-sm">
+                      <p className="font-medium text-zinc-700">Procedures</p>
+                      {(notesRun.traumaProcedures?.length ?? 0) > 0 ? (
+                        <ul className="mt-1 list-inside list-disc text-zinc-800">
+                          {(notesRun.traumaProcedures ?? []).map((proc, idx) => (
+                            <li key={`${proc.procedureId}-${idx}`}>{proc.procedureName}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap text-zinc-800">
+                          {notesRun.traumaProceduresText}
+                        </p>
+                      )}
+                      {!!notesRun.traumaProcedureOtherText && (
+                        <p className="mt-1 text-zinc-800">
+                          Other: {notesRun.traumaProcedureOtherText}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {notesRun.vascularAccess?.length > 0 && (
+                    <div className="text-sm">
+                      <p className="font-medium text-zinc-700">IV/IO access</p>
+                      <ul className="mt-1 list-inside list-disc text-zinc-800">
+                        {notesRun.vascularAccess.map((entry, idx) => (
+                          <li key={`${entry.type}-${entry.location}-${entry.size}-${idx}`}>
+                            {entry.type.toUpperCase()} - {entry.location} ({entry.size})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
               <div className="text-sm">
                 <p className="font-medium text-zinc-700">Arrest</p>
                 <p className="mt-1 text-zinc-800">
@@ -2043,11 +3026,13 @@ export default function Home() {
               {!!notesRun.rhythmStripImageDataUrl && (
                 <img src={notesRun.rhythmStripImageDataUrl} alt="Rhythm strip" className="max-h-40 rounded border border-zinc-200" />
               )}
+                </>
+              )}
             </div>
-            <div className="flex justify-end border-t border-zinc-100 px-4 py-3">
+            <div className="flex justify-end border-t border-slate-100 px-5 py-4">
               <button
                 type="button"
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                className="btn-toolbar-primary"
                 onClick={() => setNotesRun(null)}
               >
                 Close
@@ -2058,6 +3043,12 @@ export default function Home() {
       )}
     </main>
   );
+}
+
+function formatYesNo(value: boolean | null | undefined): string {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "—";
 }
 
 function formatWitnessDisplay(value: ArrestWitnessing | null | undefined): string {
@@ -2082,10 +3073,6 @@ function formatDispositionDisplay(value: PatientDisposition | null | undefined):
 function formatTextCell(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? "";
   return trimmed || "—";
-}
-
-function formatYesNo(value: boolean | null | undefined): string {
-  return value ? "Yes" : "No";
 }
 
 function formatAirwayAdjuncts(items: RunRecord["airwayAdjuncts"]): string {
@@ -2119,6 +3106,23 @@ function formatResqCpr(pumpUsed: boolean, podUsed: boolean): string {
   if (pumpUsed) parts.push("Pump");
   if (podUsed) parts.push("Pod");
   return parts.length ? parts.join(" + ") : "No";
+}
+
+function formatTraumaProcedures(run: RunRecord): string {
+  const items = run.traumaProcedures?.map((entry) => entry.procedureName) ?? [];
+  const parts = [...items];
+  if (run.traumaProcedureOtherText?.trim()) {
+    parts.push(`Other: ${run.traumaProcedureOtherText.trim()}`);
+  }
+  if (parts.length) return parts.join("; ");
+  return run.traumaProceduresText?.trim() || "";
+}
+
+function formatTraumaMedications(run: RunRecord): string {
+  if (run.medicationsAdministered?.length) {
+    return formatMedications(run.medicationsAdministered);
+  }
+  return run.traumaMedicationsText?.trim() || "";
 }
 
 function formatMedications(items: RunRecord["medicationsAdministered"]): string {
@@ -2427,20 +3431,5 @@ function Badge({
     <span className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${toneClasses}`}>
       {children}
     </span>
-  );
-}
-
-function StatChip({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="shrink-0 rounded-lg border border-white/30 bg-white/10 px-2 py-2 text-white">
-      <p className="text-[11px] uppercase tracking-wide opacity-85">{label}</p>
-      <p className="text-lg font-semibold">{value}</p>
-    </div>
   );
 }

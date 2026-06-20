@@ -13,6 +13,7 @@ import type {
   OutcomeCategory,
   PatientAgeCategory,
   PatientDisposition,
+  ProcedureRecord,
   RunRecord,
   RunType,
   Shift,
@@ -32,7 +33,13 @@ type CreateRunPayload = {
   imageTrendIncidentLink?: string;
   shift: Shift;
   callDateTime: string;
-  patientDisposition: PatientDisposition | null;
+  traumaCenterCriteriaSelected?: boolean | null;
+  traumaTriageCriteriaSelected?: boolean | null;
+  traumaMedicationsText?: string;
+  traumaProcedures?: ProcedureRecord[];
+  traumaProcedureOtherText?: string;
+  traumaProceduresText?: string;
+  patientDisposition?: PatientDisposition | null;
   rosc: boolean;
   defibrillationGiven: boolean;
   defibrillationCount: number | null;
@@ -115,6 +122,21 @@ export async function GET() {
         run.patientAgeCategory === "adult" || run.patientAgeCategory === "pediatric"
           ? run.patientAgeCategory
           : null,
+      traumaCenterCriteriaSelected:
+        typeof run.traumaCenterCriteriaSelected === "boolean" ? run.traumaCenterCriteriaSelected : null,
+      traumaTriageCriteriaSelected:
+        typeof run.traumaTriageCriteriaSelected === "boolean" ? run.traumaTriageCriteriaSelected : null,
+      traumaMedicationsText: run.traumaMedicationsText ?? "",
+      traumaProcedures: Array.isArray(run.traumaProcedures)
+        ? run.traumaProcedures
+            .filter((entry) => entry.procedureId && entry.procedureName)
+            .map((entry) => ({
+              procedureId: entry.procedureId,
+              procedureName: entry.procedureName,
+            }))
+        : [],
+      traumaProcedureOtherText: run.traumaProcedureOtherText ?? "",
+      traumaProceduresText: run.traumaProceduresText ?? "",
     }))
     .sort((a, b) => b.callDateTime.localeCompare(a.callDateTime));
   return NextResponse.json({ runs: sortedRuns });
@@ -168,6 +190,34 @@ export async function POST(request: Request) {
       : null;
 
   if (payload.runType === "trauma") {
+    const traumaVascularAccess: VascularAccessRecord[] = (payload.vascularAccess || [])
+      .filter((entry) => vascularAccessTypes.includes(entry.type))
+      .map((entry) => ({
+        type: entry.type,
+        location: (entry.location || "").trim(),
+        size: (entry.size || "").trim(),
+      }))
+      .filter((entry) => entry.location && entry.size);
+
+    const traumaMedicationsAdministered: MedicationRecord[] = (payload.medicationsAdministered || [])
+      .filter((entry) => entry.medicationId && entry.medicationName)
+      .map((entry) => ({
+        medicationId: entry.medicationId,
+        medicationName: entry.medicationName,
+        amount: (entry.amount || "").trim(),
+        administrations: Number.isFinite(entry.administrations) && entry.administrations > 0
+          ? Math.floor(entry.administrations)
+          : 1,
+      }))
+      .filter((entry) => entry.amount);
+
+    const traumaProcedures: ProcedureRecord[] = (payload.traumaProcedures || [])
+      .filter((entry) => entry.procedureId && entry.procedureName)
+      .map((entry) => ({
+        procedureId: entry.procedureId,
+        procedureName: entry.procedureName,
+      }));
+
     const newRun: RunRecord = {
       id: randomUUID(),
       runType: "trauma",
@@ -180,16 +230,28 @@ export async function POST(request: Request) {
       imageTrendIncidentLink: incidentLink,
       shift: payload.shift || "A",
       callDateTime: payload.callDateTime,
+      traumaCenterCriteriaSelected:
+        typeof payload.traumaCenterCriteriaSelected === "boolean"
+          ? payload.traumaCenterCriteriaSelected
+          : null,
+      traumaTriageCriteriaSelected:
+        typeof payload.traumaTriageCriteriaSelected === "boolean"
+          ? payload.traumaTriageCriteriaSelected
+          : null,
+      traumaMedicationsText: payload.traumaMedicationsText?.trim() || "",
+      traumaProcedures,
+      traumaProcedureOtherText: payload.traumaProcedureOtherText?.trim() || "",
+      traumaProceduresText: payload.traumaProceduresText?.trim() || "",
       patientDisposition: null,
       rosc: false,
       defibrillationGiven: false,
       defibrillationCount: null,
       airwayAdjuncts: [],
-      vascularAccess: [],
+      vascularAccess: traumaVascularAccess,
       resqPumpUsed: false,
       resqPodUsed: false,
-      medicationsAdministered: [],
-      medicationOtherText: "",
+      medicationsAdministered: traumaMedicationsAdministered,
+      medicationOtherText: payload.medicationOtherText?.trim() || "",
       incidentSummary: "",
       qiIssuesIdentified: false,
       qiIssueSummary: "",

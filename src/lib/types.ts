@@ -63,6 +63,11 @@ export type MedicationRecord = {
   administrations: number;
 };
 
+export type ProcedureRecord = {
+  procedureId: string;
+  procedureName: string;
+};
+
 export type AirwayAdjunctRecord = {
   type: AirwayAdjunctType;
   size?: string;
@@ -113,6 +118,18 @@ export type RunRecord = {
   /** @deprecated Kept for backwards compatibility with older records. */
   notes: string;
   itemsUsed: UsedItemRecord[];
+  /** Trauma module: trauma center criteria met. */
+  traumaCenterCriteriaSelected?: boolean | null;
+  /** Trauma module: trauma triage criteria met. */
+  traumaTriageCriteriaSelected?: boolean | null;
+  /** Trauma module: free-text medications (legacy; see medicationsAdministered). */
+  traumaMedicationsText?: string;
+  /** Trauma module: structured procedures performed. */
+  traumaProcedures?: ProcedureRecord[];
+  /** Trauma module: other procedures outside preset list. */
+  traumaProcedureOtherText?: string;
+  /** Trauma module: free-text procedures (legacy; see traumaProcedures). */
+  traumaProceduresText?: string;
   createdAt: string;
 };
 

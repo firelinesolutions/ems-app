@@ -34,42 +34,62 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-6 text-white">
-      <div className="mx-auto w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl">
-        <h1 className="text-xl font-semibold">EMS QA — Protected</h1>
-        <p className="mt-1 text-sm text-white/70">
-          Enter the shared password to access the site.
+    <main className="login-page">
+      <div className="login-card">
+        <div className="flex items-center gap-3">
+          <div className="brand-mark" aria-hidden="true">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+          </div>
+          <div>
+            <p className="brand-eyebrow">Clinical &amp; Operations QA</p>
+            <h1 className="text-xl font-bold tracking-tight text-white">EMS OpsQA</h1>
+          </div>
+        </div>
+
+        <p className="mt-5 text-sm leading-relaxed text-white/65">
+          Sign in to access your organization&apos;s quality assurance dashboard.
         </p>
 
-        <form className="mt-5 space-y-3" onSubmit={handleSubmit}>
-          <label className="block text-sm">
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <label className="block text-sm font-medium text-white/80">
             Password
             <input
-              className="mt-1 w-full rounded-lg border border-white/15 bg-white/10 p-2 text-white placeholder:text-white/40"
+              className="login-field"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
               autoFocus
               required
             />
           </label>
 
           {error ? (
-            <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-red-200">
+            <p className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
               {error}
             </p>
           ) : null}
 
-          <button
-            type="submit"
-            className="h-10 w-full rounded-lg bg-white px-3 text-sm font-semibold text-slate-900 disabled:opacity-60"
-            disabled={isSubmitting}
-          >
+          <button type="submit" className="login-submit" disabled={isSubmitting}>
             {isSubmitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-white/35">
+          Secure access for authorized personnel only
+        </p>
       </div>
     </main>
   );
 }
-

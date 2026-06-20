@@ -143,5 +143,61 @@
       "name": "IV Kit"
     }
   ],
-  "runs": []
+  "runs": [
+    {
+      "id": "4dd9e8d5-1b53-4f46-966a-4a6c72bbc6d2",
+      "runType": "cardiac-arrest",
+      "primaryResponseTerritoryId": "st-1",
+      "primaryResponseTerritoryName": "Station 1",
+      "stationId": "st-1",
+      "stationName": "Station 1",
+      "patientAge": 96,
+      "runNumber": "037969",
+      "imageTrendIncidentLink": "Incident037969",
+      "shift": "A",
+      "callDateTime": "2026-06-19T10:09",
+      "patientDisposition": "transport",
+      "rosc": false,
+      "defibrillationGiven": true,
+      "defibrillationCount": 3,
+      "airwayAdjuncts": [
+        {
+          "type": "ett",
+          "size": "7.5"
+        }
+      ],
+      "vascularAccess": [
+        {
+          "type": "io",
+          "location": "Proximal Tibia",
+          "size": "45"
+        }
+      ],
+      "resqPumpUsed": true,
+      "resqPodUsed": true,
+      "medicationsAdministered": [
+        {
+          "medicationId": "med-oxygen",
+          "medicationName": "Oxygen",
+          "amount": "15",
+          "administrations": 1
+        }
+      ],
+      "medicationOtherText": "",
+      "incidentSummary": "",
+      "qiIssuesIdentified": false,
+      "qiIssueSummary": "",
+      "defibPadsAppliedTime": "",
+      "compressionsStartedTime": "",
+      "defibrillationTime": "",
+      "zollRecordLink": "",
+      "rhythmStripImageDataUrl": "",
+      "outcomeCategory": "needs-improvement",
+      "arrestWitnessing": "witnessed",
+      "patientAgeCategory": "adult",
+      "notes": "",
+      "itemsUsed": [],
+      "createdAt": "2026-06-19T14:12:26.660Z"
+    }
+  ]
 }
