@@ -485,6 +485,22 @@ body {
   background: #f8fafc;
 }
 
+.data-table-centered {
+  text-align: center;
+}
+
+.data-table-centered thead th,
+.data-table-centered tbody td {
+  text-align: center;
+}
+
+.data-table-centered .data-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
 .link-incident {
   font-weight: 600;
   color: var(--accent);

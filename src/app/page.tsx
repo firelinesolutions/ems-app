@@ -20,6 +20,7 @@ import type {
 import { AppHeader } from "@/components/app-header";
 import { LoadingScreen } from "@/components/loading-screen";
 import { StatusBanner } from "@/components/status-banner";
+import { TimeSelect24, isValidTime24 } from "@/components/time-input-24";
 
 type OptionsResponse = {
   stations: Station[];
@@ -55,7 +56,7 @@ const battalionStationIds: Record<Battalion, string[]> = {
   b1: ["st-1", "st-7", "st-9", "st-22", "st-27"],
   b2: ["st-2", "st-3", "st-4", "st-5", "st-19"],
   b3: ["st-12", "st-14", "st-15", "st-16", "st-20", "st-21", "st-25"],
-  b4: ["st-8", "st-18", "st-24", "st-26", "st-28"],
+  b4: ["st-8", "st-11", "st-18", "st-24", "st-26", "st-28"],
   b5: [],
 };
 const arrestWitnessOptions: Array<{ value: ArrestWitnessing; label: string }> = [
@@ -123,6 +124,7 @@ const traumaProcedureOptions: Array<{ id: string; name: string }> = [
   { id: "proc-pelvic-binder", name: "Pelvic Binder" },
   { id: "proc-traction-splint", name: "Traction Splint" },
   { id: "proc-direct-pressure", name: "Direct Pressure" },
+  { id: "proc-general-wound-care", name: "General Wound Care/Dressing" },
 ];
 // Branding: keep this app deployable for any agency.
 
@@ -211,6 +213,8 @@ export default function Home() {
   const [traumaTriageFilter, setTraumaTriageFilter] = useState<RoscFilter>("all");
   const [traumaStartDate, setTraumaStartDate] = useState("");
   const [traumaEndDate, setTraumaEndDate] = useState("");
+  const [traumaMedicationFilter, setTraumaMedicationFilter] = useState("all");
+  const [traumaProcedureFilter, setTraumaProcedureFilter] = useState("all");
 
   // -------- Trauma entry form state --------
   const [traumaBattalion, setTraumaBattalion] = useState<Battalion>("b1");
@@ -251,6 +255,8 @@ export default function Home() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const traumaImportInputRef = useRef<HTMLInputElement | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingCardiacRunId, setEditingCardiacRunId] = useState<string | null>(null);
+  const [editingTraumaRunId, setEditingTraumaRunId] = useState<string | null>(null);
   const [notesRun, setNotesRun] = useState<RunRecord | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -362,7 +368,7 @@ export default function Home() {
     [cardiacRuns, battalionFilter, stationFilter, roscFilter, startDate, endDate],
   );
 
-  const filteredTraumaRuns = useMemo(
+  const traumaBaseFilteredRuns = useMemo(
     () =>
       traumaRuns.filter((run) => {
         const matchesBattalion =
@@ -404,6 +410,48 @@ export default function Home() {
       traumaEndDate,
     ],
   );
+
+  const traumaMedicationUsageById = useMemo(
+    () => buildTraumaMedicationUsageMap(traumaBaseFilteredRuns),
+    [traumaBaseFilteredRuns],
+  );
+
+  const traumaProcedureUsageById = useMemo(
+    () => buildTraumaProcedureUsageMap(traumaBaseFilteredRuns),
+    [traumaBaseFilteredRuns],
+  );
+
+  const filteredTraumaRuns = useMemo(
+    () =>
+      traumaBaseFilteredRuns.filter((run) => {
+        const matchesMedication =
+          traumaMedicationFilter === "all" ||
+          runMatchesTraumaMedicationFilter(run, traumaMedicationFilter);
+        const matchesProcedure =
+          traumaProcedureFilter === "all" ||
+          runMatchesTraumaProcedureFilter(run, traumaProcedureFilter);
+        return matchesMedication && matchesProcedure;
+      }),
+    [traumaBaseFilteredRuns, traumaMedicationFilter, traumaProcedureFilter],
+  );
+
+  const selectedTraumaMedicationUsage = useMemo(() => {
+    if (traumaMedicationFilter === "all") return null;
+    return traumaMedicationUsageById.get(traumaMedicationFilter) ?? {
+      label: traumaMedicationFilter,
+      administrations: 0,
+      runs: 0,
+    };
+  }, [traumaMedicationFilter, traumaMedicationUsageById]);
+
+  const selectedTraumaProcedureUsage = useMemo(() => {
+    if (traumaProcedureFilter === "all") return null;
+    return traumaProcedureUsageById.get(traumaProcedureFilter) ?? {
+      label: traumaProcedureFilter,
+      count: 0,
+      runs: 0,
+    };
+  }, [traumaProcedureFilter, traumaProcedureUsageById]);
 
   const sortedTraumaRuns = useMemo(() => {
     const shiftOrder: Record<Shift, number> = { A: 0, B: 1, C: 2 };
@@ -531,14 +579,20 @@ export default function Home() {
       if (!incidentId) {
         throw new Error("Paste a valid ImageTrend Incident Link (it must contain Incident#######).");
       }
+      const callTime = splitInputDateTime(callDateTime).time;
+      if (!callTime || !isValidTime24(callTime)) {
+        throw new Error("Enter call time in 24-hour format (HH:MM), e.g. 14:30.");
+      }
       const needsAirwaySize = Object.entries(airwayAdjuncts).some(
         ([type, checked]) => checked && type !== "bvm" && !airwayAdjunctSizes[type as AirwayAdjunctType].trim(),
       );
       if (needsAirwaySize) {
         throw new Error("Size is required for airway adjuncts except BVM.");
       }
-      const response = await fetch("/api/runs", {
-        method: "POST",
+      const response = await fetch(
+        editingCardiacRunId ? `/api/runs/${encodeURIComponent(editingCardiacRunId)}` : "/api/runs",
+        {
+        method: editingCardiacRunId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           runType: "cardiac-arrest",
@@ -576,45 +630,23 @@ export default function Home() {
           arrestWitnessing,
           patientAgeCategory,
           notes: incidentSummary,
+          itemsUsed: [],
         }),
-      });
+      },
+      );
 
       const json = (await response.json()) as { error?: string; run?: RunRecord };
       if (!response.ok || !json.run) {
         throw new Error(json.error || "Failed to save run.");
       }
 
-      setRuns((prev) => [json.run!, ...prev]);
-      setPrimaryResponseTerritoryId(stations[0]?.id ?? "");
-      setPatientAge("");
-      setImageTrendIncidentLink("");
-      setShift("A");
-      setPatientDisposition(null);
-      setArrestWitnessing(null);
-      setPatientAgeCategory(null);
-      setRosc(false);
-      setDefibrillationGiven(false);
-      setDefibrillationCount("");
-      setAirwayAdjuncts({ bvm: false, npa: false, opa: false, "i-gel": false, ett: false });
-      setAirwayAdjunctSizes({ bvm: "", npa: "", opa: "", "i-gel": "", ett: "" });
-      setVascularAccess([]);
-      setAccessTypeInput("iv");
-      setAccessLocationInput("");
-      setAccessSizeInput("");
-      setResqPumpUsed(false);
-      setResqPodUsed(false);
-      setMedicationsAdministered([]);
-      setMedicationOtherText("");
-      setIncidentSummary("");
-      setQiIssuesIdentified(false);
-      setQiIssueSummary("");
-      setDefibPadsAppliedTime("");
-      setCompressionsStartedTime("");
-      setDefibrillationTime("");
-      setZollRecordLink("");
-      setRhythmStripImageDataUrl("");
-      setCallDateTime(toInputDateTime(new Date()));
-      setSuccess("Run saved successfully.");
+      setRuns((prev) =>
+        editingCardiacRunId
+          ? prev.map((entry) => (entry.id === json.run!.id ? json.run! : entry))
+          : [json.run!, ...prev],
+      );
+      resetCardiacForm();
+      setSuccess(editingCardiacRunId ? "Run updated successfully." : "Run saved successfully.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save run.");
     } finally {
@@ -636,9 +668,15 @@ export default function Home() {
       if (!traumaCenterCriteria || !traumaTriageCriteria) {
         throw new Error("Select Yes or No for Trauma Center and Trauma Triage criteria.");
       }
+      const traumaCallTime = splitInputDateTime(traumaCallDateTime).time;
+      if (!traumaCallTime || !isValidTime24(traumaCallTime)) {
+        throw new Error("Enter call time in 24-hour format (HH:MM), e.g. 14:30.");
+      }
 
-      const response = await fetch("/api/runs", {
-        method: "POST",
+      const response = await fetch(
+        editingTraumaRunId ? `/api/runs/${encodeURIComponent(editingTraumaRunId)}` : "/api/runs",
+        {
+        method: editingTraumaRunId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           runType: "trauma",
@@ -656,32 +694,33 @@ export default function Home() {
           medicationsAdministered: traumaMedicationsAdministered,
           medicationOtherText: traumaMedicationOtherText,
           vascularAccess: traumaVascularAccess,
+          rosc: false,
+          defibrillationGiven: false,
+          defibrillationCount: null,
+          airwayAdjuncts: [],
+          resqPumpUsed: false,
+          resqPodUsed: false,
+          qiIssuesIdentified: false,
+          outcomeCategory: "needs-improvement",
+          arrestWitnessing: null,
+          patientAgeCategory: null,
+          itemsUsed: [],
         }),
-      });
+      },
+      );
 
       const json = (await response.json()) as { error?: string; run?: RunRecord };
       if (!response.ok || !json.run) {
         throw new Error(json.error || "Failed to save trauma run.");
       }
 
-      setRuns((prev) => [json.run!, ...prev]);
-      setTraumaPatientAge("");
-      setTraumaImageTrendIncidentLink("");
-      setTraumaShift("A");
-      setTraumaCallDateTime(toInputDateTime(new Date()));
-      setTraumaCenterCriteria("");
-      setTraumaTriageCriteria("");
-      setTraumaMedicationsAdministered([]);
-      setTraumaSelectedMedicationDosage("");
-      setTraumaMedicationOtherText("");
-      setTraumaProceduresPerformed([]);
-      setTraumaProcedureOtherText("");
-      setTraumaVascularAccess([]);
-      setTraumaAccessTypeInput("iv");
-      setTraumaAccessLocationInput("");
-      setTraumaAccessLocationOtherInput("");
-      setTraumaAccessSizeInput("");
-      setSuccess("Trauma run saved successfully.");
+      setRuns((prev) =>
+        editingTraumaRunId
+          ? prev.map((entry) => (entry.id === json.run!.id ? json.run! : entry))
+          : [json.run!, ...prev],
+      );
+      resetTraumaForm();
+      setSuccess(editingTraumaRunId ? "Trauma run updated successfully." : "Trauma run saved successfully.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save trauma run.");
     } finally {
@@ -986,6 +1025,8 @@ export default function Home() {
     setTraumaTriageFilter("all");
     setTraumaStartDate("");
     setTraumaEndDate("");
+    setTraumaMedicationFilter("all");
+    setTraumaProcedureFilter("all");
   }
 
   const stationsForSelectedBattalion = useMemo(() => {
@@ -1090,6 +1131,147 @@ export default function Home() {
     }
   }, [battalionFilter, stationFilter, stationsForBattalionFilter]);
 
+  function resetCardiacForm() {
+    setEditingCardiacRunId(null);
+    setPrimaryResponseTerritoryId(stations[0]?.id ?? "");
+    setPatientAge("");
+    setImageTrendIncidentLink("");
+    setShift("A");
+    setPatientDisposition(null);
+    setArrestWitnessing(null);
+    setPatientAgeCategory(null);
+    setRosc(false);
+    setDefibrillationGiven(false);
+    setDefibrillationCount("");
+    setAirwayAdjuncts({ bvm: false, npa: false, opa: false, "i-gel": false, ett: false });
+    setAirwayAdjunctSizes({ bvm: "", npa: "", opa: "", "i-gel": "", ett: "" });
+    setVascularAccess([]);
+    setAccessTypeInput("iv");
+    setAccessLocationInput("");
+    setAccessSizeInput("");
+    setResqPumpUsed(false);
+    setResqPodUsed(false);
+    setMedicationsAdministered([]);
+    setMedicationOtherText("");
+    setIncidentSummary("");
+    setQiIssuesIdentified(false);
+    setQiIssueSummary("");
+    setDefibPadsAppliedTime("");
+    setCompressionsStartedTime("");
+    setDefibrillationTime("");
+    setZollRecordLink("");
+    setRhythmStripImageDataUrl("");
+    setCallDateTime(toInputDateTime(new Date()));
+  }
+
+  function resetTraumaForm() {
+    setEditingTraumaRunId(null);
+    setTraumaPatientAge("");
+    setTraumaImageTrendIncidentLink("");
+    setTraumaShift("A");
+    setTraumaCallDateTime(toInputDateTime(new Date()));
+    setTraumaCenterCriteria("");
+    setTraumaTriageCriteria("");
+    setTraumaMedicationsAdministered([]);
+    setTraumaSelectedMedicationDosage("");
+    setTraumaMedicationOtherText("");
+    setTraumaProceduresPerformed([]);
+    setTraumaProcedureOtherText("");
+    setTraumaVascularAccess([]);
+    setTraumaAccessTypeInput("iv");
+    setTraumaAccessLocationInput("");
+    setTraumaAccessLocationOtherInput("");
+    setTraumaAccessSizeInput("");
+  }
+
+  function loadCardiacRunForEdit(run: RunRecord) {
+    setError("");
+    setSuccess("");
+    setActiveModule("cardiac-arrest");
+    setEditingCardiacRunId(run.id);
+    setBattalion(getBattalionForStationId(run.primaryResponseTerritoryId));
+    setPrimaryResponseTerritoryId(run.primaryResponseTerritoryId);
+    setPatientAge(run.patientAge !== null ? String(run.patientAge) : "");
+    setImageTrendIncidentLink(run.imageTrendIncidentLink);
+    setShift(run.shift);
+    setCallDateTime(toInputDateTime(new Date(run.callDateTime)));
+    setPatientDisposition(run.patientDisposition);
+    setArrestWitnessing(run.arrestWitnessing);
+    setPatientAgeCategory(run.patientAgeCategory);
+    setRosc(run.rosc);
+    setDefibrillationGiven(run.defibrillationGiven);
+    setDefibrillationCount(run.defibrillationCount !== null ? String(run.defibrillationCount) : "");
+    const nextAdjuncts: Record<AirwayAdjunctType, boolean> = {
+      bvm: false,
+      npa: false,
+      opa: false,
+      "i-gel": false,
+      ett: false,
+    };
+    const nextAdjunctSizes: Record<AirwayAdjunctType, string> = {
+      bvm: "",
+      npa: "",
+      opa: "",
+      "i-gel": "",
+      ett: "",
+    };
+    for (const entry of run.airwayAdjuncts || []) {
+      nextAdjuncts[entry.type] = true;
+      if (entry.type !== "bvm" && entry.size) {
+        nextAdjunctSizes[entry.type] = entry.size;
+      }
+    }
+    setAirwayAdjuncts(nextAdjuncts);
+    setAirwayAdjunctSizes(nextAdjunctSizes);
+    setVascularAccess(run.vascularAccess || []);
+    setResqPumpUsed(run.resqPumpUsed);
+    setResqPodUsed(run.resqPodUsed);
+    setMedicationsAdministered(run.medicationsAdministered || []);
+    setMedicationOtherText(run.medicationOtherText || "");
+    setIncidentSummary(run.incidentSummary || run.notes || "");
+    setQiIssuesIdentified(run.qiIssuesIdentified);
+    setQiIssueSummary(run.qiIssueSummary || "");
+    setDefibPadsAppliedTime(run.defibPadsAppliedTime || "");
+    setCompressionsStartedTime(run.compressionsStartedTime || "");
+    setDefibrillationTime(run.defibrillationTime || "");
+    setZollRecordLink(run.zollRecordLink || "");
+    setRhythmStripImageDataUrl(run.rhythmStripImageDataUrl || "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function loadTraumaRunForEdit(run: RunRecord) {
+    setError("");
+    setSuccess("");
+    setActiveModule("trauma");
+    setEditingTraumaRunId(run.id);
+    setTraumaBattalion(getBattalionForStationId(run.primaryResponseTerritoryId));
+    setTraumaPrimaryResponseTerritoryId(run.primaryResponseTerritoryId);
+    setTraumaPatientAge(run.patientAge !== null ? String(run.patientAge) : "");
+    setTraumaImageTrendIncidentLink(run.imageTrendIncidentLink);
+    setTraumaShift(run.shift);
+    setTraumaCallDateTime(toInputDateTime(new Date(run.callDateTime)));
+    setTraumaCenterCriteria(
+      run.traumaCenterCriteriaSelected === true
+        ? "yes"
+        : run.traumaCenterCriteriaSelected === false
+          ? "no"
+          : "",
+    );
+    setTraumaTriageCriteria(
+      run.traumaTriageCriteriaSelected === true
+        ? "yes"
+        : run.traumaTriageCriteriaSelected === false
+          ? "no"
+          : "",
+    );
+    setTraumaMedicationsAdministered(run.medicationsAdministered || []);
+    setTraumaMedicationOtherText(run.medicationOtherText || "");
+    setTraumaProceduresPerformed(run.traumaProcedures || []);
+    setTraumaProcedureOtherText(run.traumaProcedureOtherText || "");
+    setTraumaVascularAccess(run.vascularAccess || []);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function handleDeleteRun(run: RunRecord) {
     const label = `${run.primaryResponseTerritoryName} · Incident ${run.runNumber}`;
     if (!window.confirm(`Delete this run entry?\n\n${label}`)) {
@@ -1138,7 +1320,7 @@ export default function Home() {
       doc.setFontSize(16);
       doc.text("EMS Cardiac Arrest QA Report", 40, 40);
       doc.setFontSize(10);
-      doc.text(`Generated: ${generatedAt.toLocaleString()}`, 40, 60);
+      doc.text(`Generated: ${formatDateTime24(generatedAt)}`, 40, 60);
       doc.text(`Filters: Unit=${stationLabel} | ROSC=${roscLabel} | Date=${dateLabel}`, 40, 76);
       doc.text(
         `Summary: Total Arrests=${filteredRuns.length}, ROSC=${roscCount}, Pt's Defibrillated=${defibCount}, QI Cases=${qiCount}`,
@@ -1331,7 +1513,7 @@ export default function Home() {
       doc.setFontSize(16);
       doc.text("EMS Trauma QA Report", 40, 40);
       doc.setFontSize(10);
-      doc.text(`Generated: ${generatedAt.toLocaleString()}`, 40, 60);
+      doc.text(`Generated: ${formatDateTime24(generatedAt)}`, 40, 60);
       doc.text(
         `Filters: Battalion=${battalionLabel} | Unit=${stationLabel} | Trauma Center=${centerLabel} | Trauma Triage=${triageLabel} | Date=${dateLabel}`,
         40,
@@ -1374,7 +1556,7 @@ export default function Home() {
           ],
         ],
         body: sortedTraumaRuns.map((run) => [
-          new Date(run.callDateTime).toLocaleString(),
+          formatDateTime24(run.callDateTime),
           `${run.primaryResponseTerritoryName} / ${run.shift}`,
           run.runNumber,
           run.patientAge ?? "-",
@@ -1443,7 +1625,7 @@ export default function Home() {
       ];
 
       const rows = sortedTraumaRuns.map((run) => [
-        new Date(run.callDateTime).toLocaleString(),
+        formatDateTime24(run.callDateTime),
         `${run.primaryResponseTerritoryName} / ${run.shift}`,
         run.runNumber,
         run.patientAge ?? "",
@@ -1461,6 +1643,61 @@ export default function Home() {
       setSuccess("Trauma CSV exported from current filters.");
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : "Failed to export trauma CSV.");
+    } finally {
+      setIsExportingCsv(false);
+    }
+  }
+
+  async function handleExportTraumaUsageCsv() {
+    setError("");
+    setSuccess("");
+    setIsExportingCsv(true);
+
+    try {
+      const medicationCounts = new Map<string, number>();
+      const procedureCounts = new Map<string, number>();
+
+      for (const run of traumaBaseFilteredRuns) {
+        for (const med of run.medicationsAdministered || []) {
+          const label = med.medicationName?.trim();
+          if (!label) continue;
+          const administrations = Number.isFinite(med.administrations) ? med.administrations : 1;
+          medicationCounts.set(label, (medicationCounts.get(label) ?? 0) + administrations);
+        }
+        if (run.medicationOtherText?.trim()) {
+          const label = `Other: ${run.medicationOtherText.trim()}`;
+          medicationCounts.set(label, (medicationCounts.get(label) ?? 0) + 1);
+        }
+        for (const proc of run.traumaProcedures || []) {
+          const label = proc.procedureName?.trim();
+          if (!label) continue;
+          procedureCounts.set(label, (procedureCounts.get(label) ?? 0) + 1);
+        }
+        if (run.traumaProcedureOtherText?.trim()) {
+          const label = `Other: ${run.traumaProcedureOtherText.trim()}`;
+          procedureCounts.set(label, (procedureCounts.get(label) ?? 0) + 1);
+        }
+      }
+
+      const medicationRows = [...medicationCounts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([name, count]) => [name, count]);
+      const procedureRows = [...procedureCounts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([name, count]) => [name, count]);
+
+      downloadCsv(`ems-trauma-usage-${toFileDate(new Date())}.csv`, [
+        ["Medication", "Times Used"],
+        ...medicationRows,
+        [],
+        ["Procedure", "Times Used"],
+        ...procedureRows,
+      ]);
+      setSuccess("Trauma medication/procedure usage CSV exported from current filters.");
+    } catch (exportError) {
+      setError(
+        exportError instanceof Error ? exportError.message : "Failed to export trauma usage CSV.",
+      );
     } finally {
       setIsExportingCsv(false);
     }
@@ -1496,9 +1733,11 @@ export default function Home() {
       {activeModule === "cardiac-arrest" ? (
       <div className="app-container grid gap-4 sm:gap-6 lg:grid-cols-3">
         <section className="card card-form-scroll lg:col-span-1">
-          <h2 className="card-title">New EMS Run</h2>
+          <h2 className="card-title">{editingCardiacRunId ? "Edit EMS Run" : "New EMS Run"}</h2>
           <p className="card-description">
-            Manual entry by station, run number, shift, outcome category, ROSC, and items used.
+            {editingCardiacRunId
+              ? "Update the saved run entry, then click Save Changes."
+              : "Manual entry by station, run number, shift, outcome category, ROSC, and items used."}
           </p>
 
           <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
@@ -1570,16 +1809,33 @@ export default function Home() {
               />
             </label>
 
-            <label className="field-label">
+            <div className="field-label">
               Call Date/Time
-              <input
-                className="field-input"
-                type="datetime-local"
-                value={callDateTime}
-                onChange={(e) => setCallDateTime(e.target.value)}
-                required
-              />
-            </label>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <input
+                  className="field-input"
+                  type="date"
+                  value={splitInputDateTime(callDateTime).date}
+                  onChange={(e) =>
+                    setCallDateTime(
+                      combineInputDateTime(e.target.value, splitInputDateTime(callDateTime).time),
+                    )
+                  }
+                  required
+                />
+                <TimeSelect24
+                  value={splitInputDateTime(callDateTime).time}
+                  onChange={(time) =>
+                    setCallDateTime(
+                      combineInputDateTime(splitInputDateTime(callDateTime).date, time),
+                    )
+                  }
+                  required
+                  aria-label="Call time (24-hour)"
+                />
+              </div>
+              <p className="form-panel-hint">24-hour clock — select hour (00–23) and minute.</p>
+            </div>
 
             <label className="field-label">
               Patient Age
@@ -1881,29 +2137,29 @@ export default function Home() {
               <div className="mt-2 grid gap-2 md:grid-cols-3">
                 <label className="text-sm">
                   Time of defib pads applied
-                  <input
-                    className="field-input"
-                    type="time"
+                  <TimeSelect24
+                    className="mt-1"
                     value={defibPadsAppliedTime}
-                    onChange={(e) => setDefibPadsAppliedTime(e.target.value)}
+                    onChange={setDefibPadsAppliedTime}
+                    aria-label="Time of defib pads applied (24-hour)"
                   />
                 </label>
                 <label className="text-sm">
                   Time to compressions
-                  <input
-                    className="field-input"
-                    type="time"
+                  <TimeSelect24
+                    className="mt-1"
                     value={compressionsStartedTime}
-                    onChange={(e) => setCompressionsStartedTime(e.target.value)}
+                    onChange={setCompressionsStartedTime}
+                    aria-label="Time to compressions (24-hour)"
                   />
                 </label>
                 <label className="text-sm">
                   Time to defibrillation
-                  <input
-                    className="field-input"
-                    type="time"
+                  <TimeSelect24
+                    className="mt-1"
                     value={defibrillationTime}
-                    onChange={(e) => setDefibrillationTime(e.target.value)}
+                    onChange={setDefibrillationTime}
+                    aria-label="Time to defibrillation (24-hour)"
                   />
                 </label>
               </div>
@@ -1968,13 +2224,29 @@ export default function Home() {
             </div>
 
 
-            <button
-              className="btn-submit w-full"
-              type="submit"
-              disabled={isSaving}
-            >
-              {isSaving ? "Saving..." : "Save Run"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {editingCardiacRunId ? (
+                <button
+                  className="btn-toolbar flex-1"
+                  type="button"
+                  onClick={resetCardiacForm}
+                  disabled={isSaving}
+                >
+                  Cancel Edit
+                </button>
+              ) : null}
+              <button
+                className="btn-submit flex-1"
+                type="submit"
+                disabled={isSaving}
+              >
+                {isSaving
+                  ? "Saving..."
+                  : editingCardiacRunId
+                    ? "Save Changes"
+                    : "Save Run"}
+              </button>
+            </div>
           </form>
         </section>
 
@@ -2155,7 +2427,7 @@ export default function Home() {
                     className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50/90"
                     onClick={() => setNotesRun(run)}
                   >
-                    <td className="p-2">{new Date(run.callDateTime).toLocaleString()}</td>
+                    <td className="p-2">{formatDateTime24(run.callDateTime)}</td>
                     <td className="hidden p-2 sm:table-cell">{run.primaryResponseTerritoryName}</td>
                     <td className="p-2" onClick={(event) => event.stopPropagation()}>
                       {getImageTrendHref(run.runNumber, run.imageTrendIncidentLink) ? (
@@ -2209,6 +2481,13 @@ export default function Home() {
                         <button
                           type="button"
                           className="btn-action"
+                          onClick={() => loadCardiacRunForEdit(run)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-action"
                           onClick={() => setNotesRun(run)}
                         >
                           Notes
@@ -2240,9 +2519,11 @@ export default function Home() {
       ) : (
       <div className="app-container grid gap-4 sm:gap-6 lg:grid-cols-3">
         <section className="card card-form-scroll lg:col-span-1">
-          <h2 className="card-title">New Trauma Run</h2>
+          <h2 className="card-title">{editingTraumaRunId ? "Edit Trauma Run" : "New Trauma Run"}</h2>
           <p className="card-description">
-            Document trauma encounters with triage criteria, treatments, and vascular access.
+            {editingTraumaRunId
+              ? "Update the saved trauma entry, then click Save Changes."
+              : "Document trauma encounters with triage criteria, treatments, and vascular access."}
           </p>
 
           <form className="mt-4 space-y-3" onSubmit={handleTraumaSubmit}>
@@ -2314,16 +2595,36 @@ export default function Home() {
               />
             </label>
 
-            <label className="field-label">
+            <div className="field-label">
               Call Date/Time
-              <input
-                className="field-input"
-                type="datetime-local"
-                value={traumaCallDateTime}
-                onChange={(e) => setTraumaCallDateTime(e.target.value)}
-                required
-              />
-            </label>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <input
+                  className="field-input"
+                  type="date"
+                  value={splitInputDateTime(traumaCallDateTime).date}
+                  onChange={(e) =>
+                    setTraumaCallDateTime(
+                      combineInputDateTime(
+                        e.target.value,
+                        splitInputDateTime(traumaCallDateTime).time,
+                      ),
+                    )
+                  }
+                  required
+                />
+                <TimeSelect24
+                  value={splitInputDateTime(traumaCallDateTime).time}
+                  onChange={(time) =>
+                    setTraumaCallDateTime(
+                      combineInputDateTime(splitInputDateTime(traumaCallDateTime).date, time),
+                    )
+                  }
+                  required
+                  aria-label="Call time (24-hour)"
+                />
+              </div>
+              <p className="form-panel-hint">24-hour clock — select hour (00–23) and minute.</p>
+            </div>
 
             <label className="field-label">
               Patient Age
@@ -2567,20 +2868,36 @@ export default function Home() {
             </div>
 
 
-            <button
-              className="btn-submit w-full"
-              type="submit"
-              disabled={isSavingTrauma}
-            >
-              {isSavingTrauma ? "Saving..." : "Save Trauma Run"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {editingTraumaRunId ? (
+                <button
+                  className="btn-toolbar flex-1"
+                  type="button"
+                  onClick={resetTraumaForm}
+                  disabled={isSavingTrauma}
+                >
+                  Cancel Edit
+                </button>
+              ) : null}
+              <button
+                className="btn-submit flex-1"
+                type="submit"
+                disabled={isSavingTrauma}
+              >
+                {isSavingTrauma
+                  ? "Saving..."
+                  : editingTraumaRunId
+                    ? "Save Changes"
+                    : "Save Trauma Run"}
+              </button>
+            </div>
           </form>
         </section>
 
         <section className="card lg:col-span-2">
           <h2 className="card-title">Unit Dashboard</h2>
           <p className="card-description">Review, filter, and export QA records for your organization.</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
             <label className="field-label-filter">
               Battalion Filter
               <select
@@ -2659,92 +2976,192 @@ export default function Home() {
               />
             </label>
 
-            <div className="mt-4 flex flex-wrap items-end gap-2 xl:col-span-2 sm:flex-nowrap">
-              <input
-                ref={traumaImportInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
-                  if (file) void handleImportCsvFile(file, "trauma");
-                }}
-              />
-              <button
-                type="button"
-                className="btn-toolbar-secondary"
-                onClick={clearTraumaDashboardFilters}
+            <label className="field-label-filter">
+              Medication Filter
+              <select
+                className="field-input"
+                value={traumaMedicationFilter}
+                onChange={(e) => setTraumaMedicationFilter(e.target.value)}
               >
-                Clear Filters
-              </button>
-              <button
-                type="button"
-                className="btn-toolbar-primary"
-                onClick={() => traumaImportInputRef.current?.click()}
-                disabled={isImportingCsv || isExportingPdf || isExportingCsv}
-                title="Import trauma runs from a CSV exported from Excel"
-              >
-                {isImportingCsv ? "Importing…" : "Import CSV"}
-              </button>
-              <div className="relative">
+                <option value="all">All Medications</option>
+                {traumaMedicationOptions.map((med) => {
+                  const usage = traumaMedicationUsageById.get(med.id);
+                  const countLabel = usage ? ` (${usage.administrations})` : "";
+                  return (
+                    <option key={med.id} value={med.id}>
+                      {med.name}
+                      {countLabel}
+                    </option>
+                  );
+                })}
+                {traumaMedicationUsageById.has("__other__") ? (
+                  <option value="__other__">
+                    Other ({traumaMedicationUsageById.get("__other__")!.administrations})
+                  </option>
+                ) : null}
+              </select>
+            </label>
+
+            <div className="field-label-filter md:col-span-2 xl:col-span-2">
+              Procedure Filter
+              <div className="mt-1.5 flex flex-wrap items-stretch gap-2">
+                <select
+                  className="field-input min-w-0 flex-1"
+                  value={traumaProcedureFilter}
+                  onChange={(e) => setTraumaProcedureFilter(e.target.value)}
+                >
+                  <option value="all">All Procedures</option>
+                  {traumaProcedureOptions.map((proc) => {
+                    const usage = traumaProcedureUsageById.get(proc.id);
+                    const countLabel = usage ? ` (${usage.count})` : "";
+                    return (
+                      <option key={proc.id} value={proc.id}>
+                        {proc.name}
+                        {countLabel}
+                      </option>
+                    );
+                  })}
+                  {traumaProcedureUsageById.has("__other__") ? (
+                    <option value="__other__">
+                      Other ({traumaProcedureUsageById.get("__other__")!.count})
+                    </option>
+                  ) : null}
+                </select>
+                <input
+                  ref={traumaImportInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (file) void handleImportCsvFile(file, "trauma");
+                  }}
+                />
                 <button
                   type="button"
-                  className="btn-toolbar-primary"
-                  onClick={() => setIsTraumaExportMenuOpen((prev) => !prev)}
-                  disabled={isExportingPdf || isExportingCsv}
-                  aria-haspopup="menu"
-                  aria-expanded={isTraumaExportMenuOpen}
+                  className="btn-toolbar-primary shrink-0"
+                  onClick={() => traumaImportInputRef.current?.click()}
+                  disabled={isImportingCsv || isExportingPdf || isExportingCsv}
+                  title="Import trauma runs from a CSV exported from Excel"
                 >
-                  {isExportingPdf || isExportingCsv ? "Exporting…" : "Export"}
+                  {isImportingCsv ? "Importing…" : "Import CSV"}
                 </button>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    className="btn-toolbar-primary"
+                    onClick={() => setIsTraumaExportMenuOpen((prev) => !prev)}
+                    disabled={isExportingPdf || isExportingCsv}
+                    aria-haspopup="menu"
+                    aria-expanded={isTraumaExportMenuOpen}
+                  >
+                    {isExportingPdf || isExportingCsv ? "Exporting…" : "Export"}
+                  </button>
 
-                {isTraumaExportMenuOpen ? (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      role="presentation"
-                      onClick={() => setIsTraumaExportMenuOpen(false)}
-                    />
-                    <div
-                      role="menu"
-                      aria-label="Trauma export options"
-                      className="export-menu"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="export-menu-item"
-                        onClick={() => {
-                          setIsTraumaExportMenuOpen(false);
-                          void handleExportTraumaPdf();
-                        }}
+                  {isTraumaExportMenuOpen ? (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        role="presentation"
+                        onClick={() => setIsTraumaExportMenuOpen(false)}
+                      />
+                      <div
+                        role="menu"
+                        aria-label="Trauma export options"
+                        className="export-menu"
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        Export PDF
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="export-menu-item"
-                        onClick={() => {
-                          setIsTraumaExportMenuOpen(false);
-                          void handleExportTraumaCsv();
-                        }}
-                      >
-                        Export CSV (Excel)
-                      </button>
-                    </div>
-                  </>
-                ) : null}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="export-menu-item"
+                          onClick={() => {
+                            setIsTraumaExportMenuOpen(false);
+                            void handleExportTraumaPdf();
+                          }}
+                        >
+                          Export PDF
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="export-menu-item"
+                          onClick={() => {
+                            setIsTraumaExportMenuOpen(false);
+                            void handleExportTraumaUsageCsv();
+                          }}
+                        >
+                          Export Usage Summary CSV
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="export-menu-item"
+                          onClick={() => {
+                            setIsTraumaExportMenuOpen(false);
+                            void handleExportTraumaCsv();
+                          }}
+                        >
+                          Export CSV (Excel)
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
-            {importProgressText && activeModule === "trauma" ? (
-              <p className="mt-2 text-xs text-zinc-600 xl:col-span-7">{importProgressText}</p>
-            ) : null}
           </div>
 
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              className="btn-toolbar-secondary"
+              onClick={clearTraumaDashboardFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          {importProgressText && activeModule === "trauma" ? (
+            <p className="mt-2 text-center text-xs text-zinc-600">{importProgressText}</p>
+          ) : null}
+
+          {selectedTraumaMedicationUsage || selectedTraumaProcedureUsage ? (
+            <p className="mt-3 text-center text-sm text-zinc-700">
+              {selectedTraumaMedicationUsage ? (
+                <span>
+                  <span className="font-medium">{selectedTraumaMedicationUsage.label}</span>
+                  {": "}
+                  {selectedTraumaMedicationUsage.administrations} administration
+                  {selectedTraumaMedicationUsage.administrations === 1 ? "" : "s"} across{" "}
+                  {selectedTraumaMedicationUsage.runs} run
+                  {selectedTraumaMedicationUsage.runs === 1 ? "" : "s"}
+                </span>
+              ) : null}
+              {selectedTraumaMedicationUsage && selectedTraumaProcedureUsage ? (
+                <span className="mx-2 text-zinc-400">·</span>
+              ) : null}
+              {selectedTraumaProcedureUsage ? (
+                <span>
+                  <span className="font-medium">{selectedTraumaProcedureUsage.label}</span>
+                  {": "}
+                  {selectedTraumaProcedureUsage.count} time
+                  {selectedTraumaProcedureUsage.count === 1 ? "" : "s"} across{" "}
+                  {selectedTraumaProcedureUsage.runs} run
+                  {selectedTraumaProcedureUsage.runs === 1 ? "" : "s"}
+                </span>
+              ) : null}
+              {(traumaStartDate || traumaEndDate) ? (
+                <span className="text-zinc-500">
+                  {" "}
+                  (within selected date range)
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+
           <div className="mt-4 w-full overflow-x-auto">
-            <table className="data-table">
+            <table className="data-table data-table-centered">
               <thead>
                 <tr className="border-b border-zinc-200">
                   <th className="p-2">Date/Time</th>
@@ -2754,6 +3171,8 @@ export default function Home() {
                   <th className="hidden p-2 md:table-cell">Shift</th>
                   <th className="hidden p-2 lg:table-cell">Center Det.</th>
                   <th className="hidden p-2 lg:table-cell">Triage Det.</th>
+                  <th className="hidden p-2 xl:table-cell">Medications</th>
+                  <th className="hidden p-2 xl:table-cell">Procedures</th>
                   <th className="hidden p-2 sm:table-cell">Category</th>
                   <th className="p-2">Center</th>
                   <th className="hidden p-2 sm:table-cell">Triage</th>
@@ -2767,7 +3186,7 @@ export default function Home() {
                     className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50/90"
                     onClick={() => setNotesRun(run)}
                   >
-                    <td className="p-2">{new Date(run.callDateTime).toLocaleString()}</td>
+                    <td className="p-2">{formatDateTime24(run.callDateTime)}</td>
                     <td className="hidden p-2 sm:table-cell">{run.primaryResponseTerritoryName}</td>
                     <td className="p-2" onClick={(event) => event.stopPropagation()}>
                       {getImageTrendHref(run.runNumber, run.imageTrendIncidentLink) ? (
@@ -2795,6 +3214,12 @@ export default function Home() {
                     <td className="hidden p-2 text-zinc-700 lg:table-cell">
                       {formatYesNo(run.traumaTriageCriteriaSelected)}
                     </td>
+                    <td className="hidden p-2 text-zinc-700 xl:table-cell">
+                      {formatTraumaMedications(run) || "—"}
+                    </td>
+                    <td className="hidden p-2 text-zinc-700 xl:table-cell">
+                      {formatTraumaProcedures(run) || "—"}
+                    </td>
                     <td className="hidden p-2 sm:table-cell">
                       <Badge tone="amber">Trauma</Badge>
                     </td>
@@ -2821,7 +3246,14 @@ export default function Home() {
                       </span>
                     </td>
                     <td className="p-2" onClick={(event) => event.stopPropagation()}>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="data-table-actions">
+                        <button
+                          type="button"
+                          className="btn-action"
+                          onClick={() => loadTraumaRunForEdit(run)}
+                        >
+                          Edit
+                        </button>
                         <button
                           type="button"
                           className="btn-action"
@@ -2843,7 +3275,7 @@ export default function Home() {
                 ))}
                 {sortedTraumaRuns.length === 0 && (
                   <tr>
-                    <td className="p-4 text-center text-zinc-500" colSpan={11}>
+                    <td className="p-4 text-center text-zinc-500" colSpan={13}>
                       No calls match the selected filters.
                     </td>
                   </tr>
@@ -2874,7 +3306,7 @@ export default function Home() {
               </h3>
               <p className="mt-1 text-sm text-slate-500">
                 {notesRun.primaryResponseTerritoryName} · Incident {notesRun.runNumber} ·{" "}
-                {new Date(notesRun.callDateTime).toLocaleString()}
+                {formatDateTime24(notesRun.callDateTime)}
               </p>
             </div>
             <div className="max-h-[min(60vh,20rem)] space-y-4 overflow-y-auto px-4 py-3">
@@ -3149,6 +3581,119 @@ function formatIssuesNotes(qiFlag: boolean, qiSummary: string, incidentSummary: 
   return note;
 }
 
+type TraumaMedicationUsage = {
+  label: string;
+  administrations: number;
+  runs: number;
+};
+
+type TraumaProcedureUsage = {
+  label: string;
+  count: number;
+  runs: number;
+};
+
+function buildTraumaMedicationUsageMap(
+  runs: RunRecord[],
+): Map<string, TraumaMedicationUsage> {
+  const usage = new Map<string, TraumaMedicationUsage>();
+
+  for (const run of runs) {
+    const seenInRun = new Set<string>();
+    for (const med of run.medicationsAdministered ?? []) {
+      if (!med.medicationId) continue;
+      const administrations = Number.isFinite(med.administrations) ? med.administrations : 1;
+      const existing = usage.get(med.medicationId);
+      if (existing) {
+        existing.administrations += administrations;
+        if (!seenInRun.has(med.medicationId)) {
+          existing.runs += 1;
+          seenInRun.add(med.medicationId);
+        }
+      } else {
+        usage.set(med.medicationId, {
+          label: med.medicationName,
+          administrations,
+          runs: 1,
+        });
+        seenInRun.add(med.medicationId);
+      }
+    }
+
+    if (run.medicationOtherText?.trim()) {
+      const existing = usage.get("__other__");
+      if (existing) {
+        existing.administrations += 1;
+        existing.runs += 1;
+      } else {
+        usage.set("__other__", {
+          label: "Other",
+          administrations: 1,
+          runs: 1,
+        });
+      }
+    }
+  }
+
+  return usage;
+}
+
+function buildTraumaProcedureUsageMap(runs: RunRecord[]): Map<string, TraumaProcedureUsage> {
+  const usage = new Map<string, TraumaProcedureUsage>();
+
+  for (const run of runs) {
+    const seenInRun = new Set<string>();
+    for (const proc of run.traumaProcedures ?? []) {
+      if (!proc.procedureId) continue;
+      const existing = usage.get(proc.procedureId);
+      if (existing) {
+        existing.count += 1;
+        if (!seenInRun.has(proc.procedureId)) {
+          existing.runs += 1;
+          seenInRun.add(proc.procedureId);
+        }
+      } else {
+        usage.set(proc.procedureId, {
+          label: proc.procedureName,
+          count: 1,
+          runs: 1,
+        });
+        seenInRun.add(proc.procedureId);
+      }
+    }
+
+    if (run.traumaProcedureOtherText?.trim()) {
+      const existing = usage.get("__other__");
+      if (existing) {
+        existing.count += 1;
+        existing.runs += 1;
+      } else {
+        usage.set("__other__", {
+          label: "Other",
+          count: 1,
+          runs: 1,
+        });
+      }
+    }
+  }
+
+  return usage;
+}
+
+function runMatchesTraumaMedicationFilter(run: RunRecord, medicationId: string): boolean {
+  if (medicationId === "__other__") {
+    return Boolean(run.medicationOtherText?.trim());
+  }
+  return (run.medicationsAdministered ?? []).some((med) => med.medicationId === medicationId);
+}
+
+function runMatchesTraumaProcedureFilter(run: RunRecord, procedureId: string): boolean {
+  if (procedureId === "__other__") {
+    return Boolean(run.traumaProcedureOtherText?.trim());
+  }
+  return (run.traumaProcedures ?? []).some((proc) => proc.procedureId === procedureId);
+}
+
 function getImageTrendIncidentUrl(incidentNumber: string): string | null {
   const template = IMAGETREND_INCIDENT_URL_TEMPLATE.trim();
   if (!template) return null;
@@ -3344,6 +3889,40 @@ async function fileToDataUrl(file: File): Promise<string> {
 function toInputDateTime(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
+function splitInputDateTime(value: string): { date: string; time: string } {
+  if (!value) return { date: "", time: "" };
+  const [date, timePart] = value.split("T");
+  return { date: date ?? "", time: (timePart ?? "").slice(0, 5) };
+}
+
+function combineInputDateTime(date: string, time: string): string {
+  if (!date || !time) return "";
+  return `${date}T${time}`;
+}
+
+function formatDateTime24(value: string | Date): string {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(
+      value.getHours(),
+    )}:${pad(value.getMinutes())}`;
+  }
+
+  const trimmed = value.trim();
+  const localMatch = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(trimmed);
+  if (localMatch) {
+    return `${localMatch[1]}-${localMatch[2]}-${localMatch[3]} ${localMatch[4]}:${localMatch[5]}`;
+  }
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return trimmed;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
     date.getHours(),
   )}:${pad(date.getMinutes())}`;
 }

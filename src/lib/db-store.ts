@@ -74,6 +74,17 @@ export async function dbInsertRun(run: RunRecord): Promise<void> {
   `;
 }
 
+export async function dbUpdateRun(run: RunRecord): Promise<boolean> {
+  await ensureDbSeed();
+  const updated = await sql<{ id: string }>`
+    update runs
+    set call_date_time = ${run.callDateTime}, run = ${run as unknown as object}
+    where id = ${run.id}
+    returning id;
+  `;
+  return updated.length > 0;
+}
+
 export async function dbDeleteRun(id: string): Promise<boolean> {
   await ensureDbSeed();
   const before = await sql<{ count: string }>`select count(*) as count from runs where id = ${id};`;
